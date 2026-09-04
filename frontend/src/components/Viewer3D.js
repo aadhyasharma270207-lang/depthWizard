@@ -103,11 +103,32 @@ export class Viewer3D {
     this.setupLighting();
     this.setupHoverMarker();
     this.setupEvents();
+    this.createSampleDemoTerrain();
     this.animate();
   }
 
+  /**
+   * Auto-mounts realistic sample terrain on startup so 3D scene is never empty or pitch black.
+   */
+  createSampleDemoTerrain() {
+    const W = 128, H = 128;
+    const grid = [];
+    for (let i = 0; i < H; i++) {
+      const row = [];
+      for (let j = 0; j < W; j++) {
+        const x = (j - W / 2) * 0.06;
+        const y = (i - H / 2) * 0.06;
+        const val = Math.sin(x) * Math.cos(y) * 24 + Math.sin(x * 0.3) * 16 + Math.cos(y * 0.5) * 12 + 35;
+        row.push(val);
+      }
+      grid.push(row);
+    }
+    this.buildTerrainFromElevationGrid(grid, null, null, 'relative', false, 'Sample Demo Terrain');
+    this.hasUserData = false;
+  }
+
   setupLighting() {
-    const ambient = new THREE.AmbientLight(0xffffff, 0.65);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.7);
     this.scene.add(ambient);
 
     // Directional Sun Light

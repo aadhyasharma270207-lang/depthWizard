@@ -17,18 +17,6 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="viewer-container">
           <div id="canvas3d"></div>
 
-          <!-- Empty State Overlay (Shown before processing) -->
-          <div id="viewer-empty-state" class="glass-card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: absolute; inset: 0; margin: auto; max-width: 460px; height: max-content; padding: 32px 24px; text-align: center; gap: 16px; z-index: 50; box-shadow: 0 16px 48px rgba(0,0,0,0.7);">
-            <div style="font-size: 3rem; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">⛰️</div>
-            <h3 style="font-size: 1.3rem; font-weight: 700; color: var(--text-main);">3D Terrain Viewer</h3>
-            <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;">
-              Generate a DSM from <strong>Depth & DSM Studio</strong> to explore the terrain in interactive 3D.
-            </p>
-            <button class="btn-primary" id="btn-go-to-studio" style="padding: 10px 24px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-top: 4px;">
-              <span>🔍</span> Go to Depth & DSM Studio
-            </button>
-          </div>
-
           <!-- Step-by-Step Loading State Overlay (Shown during 3D terrain building) -->
           <div id="viewer-loading-state" class="glass-card" style="display: none; flex-direction: column; align-items: center; justify-content: center; position: absolute; inset: 0; margin: auto; max-width: 420px; height: max-content; padding: 28px; text-align: center; gap: 14px; z-index: 50; box-shadow: 0 16px 48px rgba(0,0,0,0.7);">
             <div class="loading-spinner" style="width: 38px; height: 38px; border: 3px solid rgba(0,242,254,0.2); border-top-color: var(--accent-cyan); border-radius: 50%; animation: spin 1s linear infinite;"></div>
