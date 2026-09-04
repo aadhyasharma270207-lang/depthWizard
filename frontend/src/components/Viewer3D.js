@@ -1221,23 +1221,55 @@ export class Viewer3D {
   }
 
   async updateTerrainFromActiveUpload(inputImageSrc, dsmImageSrc = null) {
-    if (!dsmImageSrc && !inputImageSrc) return;
-    const src = dsmImageSrc || inputImageSrc;
-    const heightData = await computeHeightsFromActiveUpload(src, 127);
-    if (!heightData) return;
+    return this.syncMeshToNewInput(inputImageSrc, dsmImageSrc, this.colorMode || 'elevation');
+  }
 
-    const W = 128, H = 128;
-    const grid = [];
-    for (let i = 0; i < H; i++) {
-      const row = [];
-      for (let j = 0; j < W; j++) {
-        const val = heightData[i * W + j] * 40.0;
-        row.push(val);
+  async syncMeshToNewInput(uploadedRgbUrl, activeDsmUrl = null, shadingMode = 'elevation') {
+    const targetImage = activeDsmUrl || uploadedRgbUrl;
+    if (!targetImage || !this.terrainMesh || !this.terrainMesh.geometry) return;
+
+    const gridRes = 127;
+    const dynamicHeights = await computeHeightsFromActiveUpload(targetImage, gridRes);
+    if (!dynamicHeights) return;
+
+    const pos = this.terrainMesh.geometry.attributes.position;
+    const colorsAttr = this.terrainMesh.geometry.attributes.color;
+    const colors = colorsAttr ? colorsAttr.array : null;
+
+    for (let i = 0; i < pos.count; i++) {
+      const normHeight = dynamicHeights[i];
+      const h = (normHeight * 38.0) - 12.0;
+      pos.setY(i, h * (this.heightExaggeration || 1.0));
+
+      if (colors) {
+        const col = this.getElevationColor(normHeight);
+        colors[i * 3] = col.r;
+        colors[i * 3 + 1] = col.g;
+        colors[i * 3 + 2] = col.b;
       }
-      grid.push(row);
     }
 
-    this.buildTerrainFromElevationGrid(grid, inputImageSrc, null, 'relative', false, 'Active Uploaded File');
+    pos.needsUpdate = true;
+    if (colorsAttr) colorsAttr.needsUpdate = true;
+    this.terrainMesh.geometry.computeVertexNormals();
+
+    const H = 128, W = 128;
+    const aspectW = 300.0;
+    const aspectH = 300.0;
+    this.buildVolumetricBlockSkirts(H, W, aspectW, aspectH, -35.0);
+
+    if (uploadedRgbUrl && this.terrainMesh.material) {
+      new THREE.TextureLoader().load(uploadedRgbUrl, (newTexture) => {
+        newTexture.needsUpdate = true;
+        this.rgbTexture = newTexture;
+        if (shadingMode === 'rgb' || shadingMode === 'textured') {
+          this.terrainMesh.material.map = newTexture;
+          this.terrainMesh.material.vertexColors = false;
+          this.terrainMesh.material.needsUpdate = true;
+        }
+      });
+    }
+
     this.hasUserData = true;
     this.fitCameraToTerrain();
   }
