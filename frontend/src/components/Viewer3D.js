@@ -723,6 +723,39 @@ export class Viewer3D {
     });
   }
 
+  async fetchGridAndBuildTerrain(jobId) {
+    const dbgDsm = document.getElementById('dbg-dsm');
+    if (dbgDsm) dbgDsm.innerText = 'LOADING...';
+
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/grid?max_size=256`);
+      if (!res.ok) throw new Error('Grid fetch failed');
+      const data = await res.json();
+
+      const previewUrl = `/api/jobs/${jobId}/preview`;
+      this.buildTerrainFromElevationGrid(
+        data.elevations,
+        previewUrl,
+        null,
+        data.unit,
+        data.is_georeferenced,
+        `Job ${jobId}`
+      );
+
+      if (dbgDsm) {
+        dbgDsm.innerText = 'READY';
+        dbgDsm.style.color = 'var(--accent-green)';
+      }
+    } catch (err) {
+      console.warn('Fallback GLB loader for job:', jobId, err);
+      this.loadGLBMesh(`/api/jobs/${jobId}/mesh`);
+      if (dbgDsm) {
+        dbgDsm.innerText = 'GLB MESH';
+        dbgDsm.style.color = 'var(--accent-cyan)';
+      }
+    }
+  }
+
   toggleFullscreen() {
     if (!document.fullscreenElement) {
       this.container.requestFullscreen().catch((err) => alert(err.message));

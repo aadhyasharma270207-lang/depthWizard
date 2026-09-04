@@ -65,6 +65,15 @@ export async function getJobDetails(jobId) {
   return await res.json();
 }
 
+export async function getJobGrid(jobId, maxSize = 256) {
+  const res = await fetch(`/api/jobs/${jobId}/grid?max_size=${maxSize}`);
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || 'Failed to fetch elevation grid');
+  }
+  return await res.json();
+}
+
 export async function getSystemHealth() {
   const res = await fetch('/health');
   if (!res.ok) return { status: 'offline' };

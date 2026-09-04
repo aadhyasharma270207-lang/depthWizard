@@ -258,22 +258,20 @@ document.addEventListener('DOMContentLoaded', () => {
   renderDepthStudio(
     document.getElementById('tab-studio'),
     (meshUrl, resData) => {
-      if (viewer) {
-        if (resData && resData.urls && resData.urls.mesh) {
-          viewer.loadGLBMesh(resData.urls.mesh);
-        }
+      if (viewer && resData && resData.job_id) {
+        viewer.fetchGridAndBuildTerrain(resData.job_id);
       }
     },
     (meshUrl, resData) => {
-      // Switch tab to viewer and load mesh
+      // Switch tab to viewer and load grid mesh
       document.querySelectorAll('.tab-btn[data-tab]').forEach((b) => b.classList.remove('active'));
       document.querySelector('.tab-btn[data-tab="viewer"]').classList.add('active');
 
       document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.remove('active'));
       document.getElementById('tab-viewer').classList.add('active');
 
-      if (viewer && resData && resData.urls && resData.urls.mesh) {
-        viewer.loadGLBMesh(resData.urls.mesh);
+      if (viewer && resData && resData.job_id) {
+        viewer.fetchGridAndBuildTerrain(resData.job_id);
       }
     }
   );

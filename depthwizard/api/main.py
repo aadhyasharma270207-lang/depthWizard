@@ -449,6 +449,55 @@ def get_job_metadata_file(job_id: str):
     return FileResponse(meta_path, filename=f"{job_id}_metadata.json", media_type="application/json")
 
 
+@app.get("/api/jobs/{job_id}/grid", tags=["Jobs"])
+def get_job_elevation_grid(job_id: str, max_size: int = 256):
+    """Returns numerical elevation grid array for direct 3D BufferGeometry construction."""
+    job_dir = os.path.join(JOBS_DIR, job_id)
+    npy_path = os.path.join(job_dir, "dsm.npy")
+    if not os.path.exists(npy_path):
+        npy_path = os.path.join(job_dir, "relative_depth.npy")
+    if not os.path.exists(npy_path):
+        raise HTTPException(status_code=404, detail=f"Elevation grid for job {job_id} not found.")
+
+    try:
+        grid = np.load(npy_path)
+        if len(grid.shape) == 3:
+            grid = grid[:, :, 0]
+
+        H, W = grid.shape[:2]
+        stride = max(1, max(H, W) // max_size)
+        sub_grid = grid[::stride, ::stride].astype(np.float32)
+        sub_grid = np.nan_to_num(sub_grid, nan=0.0, posinf=1.0, neginf=0.0)
+
+        meta_path = os.path.join(job_dir, "metadata.json")
+        unit = "relative"
+        is_georeferenced = False
+        if os.path.exists(meta_path):
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+                unit = meta.get("unit", "relative")
+                is_georeferenced = meta.get("is_georeferenced", False)
+
+        return {
+            "status": "success",
+            "job_id": job_id,
+            "raw_width": W,
+            "raw_height": H,
+            "grid_width": sub_grid.shape[1],
+            "grid_height": sub_grid.shape[0],
+            "subsample_stride": stride,
+            "unit": unit,
+            "is_georeferenced": is_georeferenced,
+            "min_elevation": float(np.min(sub_grid)),
+            "max_elevation": float(np.max(sub_grid)),
+            "mean_elevation": float(np.mean(sub_grid)),
+            "elevations": sub_grid.tolist(),
+        }
+    except Exception as e:
+        logger.error(f"Failed to load grid for job {job_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Grid extraction failed: {str(e)}")
+
+
 @app.get("/{full_path:path}")
 def catch_all_spa(full_path: str):
     """Fallback SPA router for frontend navigation routes."""
