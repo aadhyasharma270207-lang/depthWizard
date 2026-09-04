@@ -100,7 +100,7 @@ def main():
 
     if args.cli:
         run_cli_demo()
-    elif args.generate-demo:
+    elif args.generate_demo:
         from depthwizard.api.routes.demo_routes import ensure_demo_dataset
         ensure_demo_dataset()
         logger.info("Demo datasets successfully created in demo_data/")
