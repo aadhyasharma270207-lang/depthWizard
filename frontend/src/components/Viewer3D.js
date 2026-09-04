@@ -63,12 +63,12 @@ export class Viewer3D {
     this.rgbTexture = null;
     this.rawWidth = 0;
     this.rawHeight = 0;
-    this.unit = 'metres';
+    this.unit = 'relative'; // 'relative' or 'metres'
     this.isCalibrated = false;
 
     this.minElev = 0;
-    this.maxElev = 100;
-    this.meanElev = 50;
+    this.maxElev = 1.0;
+    this.meanElev = 0.5;
 
     // Config Options
     this.heightExaggeration = 1.0;
@@ -77,7 +77,7 @@ export class Viewer3D {
     this.shadingMode = 'smooth'; // 'smooth', 'flat'
     this.showWireframe = false;
     this.showContour = false;
-    this.contourInterval = 10; // meters
+    this.contourInterval = 10;
     this.showGrid = true;
 
     // Raycasting & Hover HUD
@@ -117,7 +117,7 @@ export class Viewer3D {
     this.sunLight.shadow.mapSize.height = 2048;
     this.scene.add(this.sunLight);
 
-    // Cyan Rim / Accent Light (Gives futuristic ridge highlights)
+    // Cyan Rim / Accent Light
     const rimLight = new THREE.DirectionalLight(0x00f2fe, 0.45);
     rimLight.position.set(-300, 200, -300);
     this.scene.add(rimLight);
@@ -129,14 +129,12 @@ export class Viewer3D {
   }
 
   setupHoverMarker() {
-    // Glowing Hover Dot
     const dotGeo = new THREE.SphereGeometry(2.5, 16, 16);
     const dotMat = new THREE.MeshBasicMaterial({ color: 0x00f2fe, wireframe: true });
     this.hoverMarker = new THREE.Mesh(dotGeo, dotMat);
     this.hoverMarker.visible = false;
     this.scene.add(this.hoverMarker);
 
-    // Vertical Laser Drop Line
     const laserGeo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(0, 0, 0),
       new THREE.Vector3(0, -100, 0),
@@ -183,7 +181,29 @@ export class Viewer3D {
       }
       grid.push(row);
     }
-    this.buildTerrainFromElevationGrid(grid, null, null, 'metres', false, 'Placeholder Preview');
+    this.buildTerrainFromElevationGrid(grid, null, null, 'relative', false, 'Placeholder Preview');
+  }
+
+  /**
+   * Dynamic camera framing function based on terrain bounding box.
+   */
+  fitCameraToTerrain() {
+    if (!this.terrainMesh) return;
+    const box = new THREE.Box3().setFromObject(this.terrainMesh);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.z, size.y);
+
+    this.camera.position.set(
+      center.x,
+      center.y + maxDim * 0.95 + 100,
+      center.z + maxDim * 1.1 + 100
+    );
+    this.camera.lookAt(center);
+    if (this.controls) {
+      this.controls.target.copy(center);
+      this.controls.update();
+    }
   }
 
   /**
@@ -193,7 +213,7 @@ export class Viewer3D {
     grid2D,
     rgbTextureUrl = null,
     slope2D = null,
-    unit = 'metres',
+    unit = 'relative',
     isCalibrated = false,
     datasetLabel = 'Custom DSM'
   ) {
@@ -207,7 +227,6 @@ export class Viewer3D {
     this.rawWidth = rawW;
     this.rawHeight = rawH;
 
-    // Subsampling stride according to mesh resolution setting
     let stride = 1;
     if (this.meshResolution === 'low') stride = Math.max(1, Math.floor(Math.max(rawW, rawH) / 128));
     else if (this.meshResolution === 'medium') stride = Math.max(1, Math.floor(Math.max(rawW, rawH) / 256));
@@ -216,7 +235,6 @@ export class Viewer3D {
     const H = Math.floor((rawH - 1) / stride) + 1;
     const W = Math.floor((rawW - 1) / stride) + 1;
 
-    // Calculate elevation bounds
     let minE = Infinity, maxE = -Infinity, sumE = 0, count = 0;
     const heights = new Float32Array(H * W);
 
@@ -235,10 +253,9 @@ export class Viewer3D {
       }
     }
     this.minElev = isFinite(minE) ? minE : 0;
-    this.maxElev = isFinite(maxE) ? maxE : 100;
-    this.meanElev = count > 0 ? sumE / count : 50;
+    this.maxElev = isFinite(maxE) ? maxE : (isCalibrated ? 100 : 1.0);
+    this.meanElev = count > 0 ? sumE / count : (isCalibrated ? 50 : 0.5);
 
-    // Build Indexed BufferGeometry
     const aspectW = 300.0;
     const aspectH = (rawH / rawW) * 300.0;
 
@@ -261,7 +278,6 @@ export class Viewer3D {
         uvs[idx * 2] = j / (W - 1);
         uvs[idx * 2 + 1] = 1.0 - i / (H - 1);
 
-        // Default elevation color
         const normH = Math.min(1.0, Math.max(0.0, (ele - this.minElev) / (this.maxElev - this.minElev || 1.0)));
         const col = this.getElevationColor(normH);
         colors[idx * 3] = col.r;
@@ -270,7 +286,6 @@ export class Viewer3D {
       }
     }
 
-    // Build Face Triangle Indices
     const indices = [];
     for (let i = 0; i < H - 1; i++) {
       for (let j = 0; j < W - 1; j++) {
@@ -289,7 +304,6 @@ export class Viewer3D {
     geometry.setIndex(indices);
     geometry.computeVertexNormals();
 
-    // Material
     const material = new THREE.MeshStandardMaterial({
       vertexColors: true,
       side: THREE.DoubleSide,
@@ -307,14 +321,12 @@ export class Viewer3D {
     this.terrainMesh.receiveShadow = true;
     this.scene.add(this.terrainMesh);
 
-    // Create Wireframe Overlay Mesh
     const wireGeo = new THREE.WireframeGeometry(geometry);
     const wireMat = new THREE.LineBasicMaterial({ color: 0x00f2fe, transparent: true, opacity: 0.3 });
     this.wireframeMesh = new THREE.LineSegments(wireGeo, wireMat);
     this.wireframeMesh.visible = this.showWireframe;
     this.scene.add(this.wireframeMesh);
 
-    // Load RGB Texture if provided
     if (rgbTextureUrl) {
       const loader = new THREE.TextureLoader();
       loader.load(rgbTextureUrl, (tex) => {
@@ -327,13 +339,9 @@ export class Viewer3D {
       });
     }
 
-    // Build Contour Lines
     this.rebuildContourLines();
+    this.fitCameraToTerrain();
 
-    // Frame terrain
-    this.resetCamera();
-
-    // Update statistics HUD callback
     if (this.onStatsUpdated) {
       this.onStatsUpdated({
         vertices: H * W,
@@ -343,38 +351,34 @@ export class Viewer3D {
         maxElev: this.maxElev,
         meanElev: this.meanElev,
         unit: this.unit,
+        isCalibrated: this.isCalibrated,
         label: datasetLabel,
       });
     }
   }
 
-  /**
-   * Elevation Color Map Generator (Purple/Blue low -> Cyan/Green mid -> Yellow/Orange/Red high)
-   */
   getElevationColor(normH) {
     const color = new THREE.Color();
     if (normH < 0.25) {
-      color.setHSL(0.75 - normH * 0.6, 0.9, 0.45); // Deep Purple -> Blue
+      color.setHSL(0.75 - normH * 0.6, 0.9, 0.45);
     } else if (normH < 0.5) {
-      color.setHSL(0.6 - (normH - 0.25) * 0.8, 0.95, 0.5); // Blue -> Cyan / Green
+      color.setHSL(0.6 - (normH - 0.25) * 0.8, 0.95, 0.5);
     } else if (normH < 0.75) {
-      color.setHSL(0.4 - (normH - 0.5) * 0.9, 0.95, 0.55); // Green -> Yellow
+      color.setHSL(0.4 - (normH - 0.5) * 0.9, 0.95, 0.55);
     } else {
-      color.setHSL(0.17 - (normH - 0.75) * 0.68, 1.0, 0.52); // Yellow -> Orange / Red
+      color.setHSL(0.17 - (normH - 0.75) * 0.68, 1.0, 0.52);
     }
     return color;
   }
 
-  /**
-   * Applies selected color mode (Elevation, Depth, Terrain DEM, Solid Clay, RGB Texture).
-   */
   setColorMode(mode) {
     this.colorMode = mode;
-    if (!this.terrainMesh) return;
+    if (!this.terrainMesh || !this.terrainMesh.geometry) return;
 
     const geo = this.terrainMesh.geometry;
     const pos = geo.attributes.position;
     const colors = geo.attributes.color;
+    if (!pos || !colors) return;
     const count = pos.count;
 
     if (mode === 'rgb' && this.rgbTexture) {
@@ -392,15 +396,14 @@ export class Viewer3D {
         if (mode === 'elevation') {
           c = this.getElevationColor(normH);
         } else if (mode === 'depth') {
-          const val = normH;
-          c.setRGB(val, val, val);
+          c.setRGB(normH, normH, normH);
         } else if (mode === 'terrain') {
-          if (normH < 0.15) c.setHex(0x1a365d); // Deep Basin
-          else if (normH < 0.45) c.setHex(0x2f855a); // Valley/Lush
-          else if (normH < 0.75) c.setHex(0x975a16); // Mountain Slope
-          else c.setHex(0xedf2f7); // Snow Peak
+          if (normH < 0.15) c.setHex(0x1a365d);
+          else if (normH < 0.45) c.setHex(0x2f855a);
+          else if (normH < 0.75) c.setHex(0x975a16);
+          else c.setHex(0xedf2f7);
         } else if (mode === 'solid') {
-          c.setHex(0x4a5568); // Matte Clay
+          c.setHex(0x4a5568);
         }
 
         colors.setXYZ(i, c.r, c.g, c.b);
@@ -411,12 +414,9 @@ export class Viewer3D {
     this.terrainMesh.material.needsUpdate = true;
   }
 
-  /**
-   * Dynamic contour lines overlay.
-   */
   rebuildContourLines() {
     if (this.contourGroup) this.scene.remove(this.contourGroup);
-    if (!this.showContour || !this.terrainMesh) return;
+    if (!this.showContour || !this.terrainMesh || !this.terrainMesh.geometry) return;
 
     this.contourGroup = new THREE.Group();
     const interval = this.contourInterval || 10;
@@ -426,7 +426,7 @@ export class Viewer3D {
     const geo = this.terrainMesh.geometry;
     const pos = geo.attributes.position;
     const index = geo.index;
-    if (!index) return;
+    if (!pos || !index) return;
 
     const contourPoints = [];
     for (let targetZ = stepMin; targetZ <= stepMax; targetZ += interval) {
@@ -438,7 +438,6 @@ export class Viewer3D {
 
         const y1 = pos.getY(i1), y2 = pos.getY(i2), y3 = pos.getY(i3);
 
-        // Check triangle edge intersections with target height plane
         const p1 = new THREE.Vector3(pos.getX(i1), y1, pos.getZ(i1));
         const p2 = new THREE.Vector3(pos.getX(i2), y2, pos.getZ(i2));
         const p3 = new THREE.Vector3(pos.getX(i3), y3, pos.getZ(i3));
@@ -517,7 +516,7 @@ export class Viewer3D {
 
   setShadingMode(mode) {
     this.shadingMode = mode;
-    if (this.terrainMesh) {
+    if (this.terrainMesh && this.terrainMesh.material) {
       this.terrainMesh.material.flatShading = mode === 'flat';
       this.terrainMesh.material.needsUpdate = true;
     }
@@ -529,7 +528,7 @@ export class Viewer3D {
   }
 
   /**
-   * Raycasting & Hover Inspection HUD
+   * Raycasting & Hover Inspection HUD (Real Elevation Unexaggerated)
    */
   inspectHoverPoint() {
     if (!this.terrainMesh) return;
@@ -542,9 +541,11 @@ export class Viewer3D {
 
     if (intersects.length > 0) {
       const pt = intersects[0].point;
-      const eleVal = (pt.y / (this.heightExaggeration || 1.0)).toFixed(2);
-      const relDepthVal = ((pt.y - this.minElev) / (this.maxElev - this.minElev || 1.0)).toFixed(2);
-      const unitStr = this.isCalibrated ? 'm' : 'rDSM';
+      const realEle = pt.y / (this.heightExaggeration || 1.0);
+      const isMetric = this.isCalibrated || this.unit === 'metres';
+      const elevText = isMetric
+        ? `Elevation: <strong>${realEle.toFixed(2)} m</strong> (Metric DSM)`
+        : `Relative Elevation: <strong>${realEle.toFixed(2)}</strong> (rDSM [0-1])`;
 
       let slopeDeg = '0.0';
       if (intersects[0].face) {
@@ -554,7 +555,6 @@ export class Viewer3D {
         slopeDeg = (rad * (180.0 / Math.PI)).toFixed(1);
       }
 
-      // Update Hover Marker
       this.hoverMarker.position.copy(pt);
       this.hoverMarker.visible = true;
 
@@ -564,7 +564,7 @@ export class Viewer3D {
       laserPositions.needsUpdate = true;
       this.hoverLaserLine.visible = true;
 
-      if (hudElev) hudElev.innerHTML = `Elevation: <strong>${eleVal} ${unitStr}</strong> (Rel Depth: ${relDepthVal})`;
+      if (hudElev) hudElev.innerHTML = elevText;
       if (hudSlope) hudSlope.innerText = `Slope: ${slopeDeg}°`;
       if (hudPos) hudPos.innerText = `X: ${pt.x.toFixed(1)} | Z: ${pt.z.toFixed(1)}`;
     } else {
@@ -573,9 +573,6 @@ export class Viewer3D {
     }
   }
 
-  /**
-   * Multi-Point Click Inspector (Point A, Point B, Distance & Delta Z)
-   */
   handleTerrainClick() {
     if (!this.terrainMesh) return;
     this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -596,18 +593,16 @@ export class Viewer3D {
   }
 
   renderPointMarkers() {
-    // Clear old markers
     while (this.pointMarkersGroup.children.length > 0) {
       this.pointMarkersGroup.remove(this.pointMarkersGroup.children[0]);
     }
     if (this.inspectionLine) this.scene.remove(this.inspectionLine);
 
     const linePoints = [];
-    this.selectedPoints.forEach((item, idx) => {
+    this.selectedPoints.forEach((item) => {
       const p = item.point;
       linePoints.push(p);
 
-      // Pin marker
       const pinGeo = new THREE.CylinderGeometry(0.5, 2.5, 12, 16);
       const pinMat = new THREE.MeshStandardMaterial({ color: 0x00f2fe, emissive: 0x00f2fe, emissiveIntensity: 0.5 });
       const pinMesh = new THREE.Mesh(pinGeo, pinMat);
@@ -615,7 +610,6 @@ export class Viewer3D {
       this.pointMarkersGroup.add(pinMesh);
     });
 
-    // Connect points with a 3D cyan laser line
     if (linePoints.length >= 2) {
       const lineGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
       const lineMat = new THREE.LineBasicMaterial({ color: 0x00f2fe, linewidth: 3 });
@@ -630,22 +624,8 @@ export class Viewer3D {
     if (this.onPointSelected) this.onPointSelected([]);
   }
 
-  /**
-   * Preset Camera Views
-   */
   resetCamera() {
-    if (!this.terrainMesh) return;
-    const box = new THREE.Box3().setFromObject(this.terrainMesh);
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.z);
-
-    this.camera.position.set(center.x, center.y + maxDim * 0.9 + 120, center.z + maxDim * 1.1 + 120);
-    this.camera.lookAt(center);
-    if (this.controls) {
-      this.controls.target.copy(center);
-      this.controls.update();
-    }
+    this.fitCameraToTerrain();
   }
 
   setCameraPreset(mode) {
@@ -677,9 +657,6 @@ export class Viewer3D {
     }
   }
 
-  /**
-   * Smooth Cinematic Camera Flythrough
-   */
   startFlythrough(speedMode = 'normal') {
     if (!this.terrainMesh) return;
     this.isFlying = true;
@@ -690,7 +667,6 @@ export class Viewer3D {
     const size = box.getSize(new THREE.Vector3());
     const radius = Math.max(size.x, size.z) * 0.7 + 50;
 
-    // Create Spline Circle Path
     const points = [];
     for (let i = 0; i <= 8; i++) {
       const angle = (i / 8) * Math.PI * 2;
@@ -709,7 +685,7 @@ export class Viewer3D {
   stopFlythrough() {
     this.isFlying = false;
     this.flyProgress = 0;
-    this.resetCamera();
+    this.fitCameraToTerrain();
   }
 
   loadGLBMesh(glbUrl) {
@@ -717,18 +693,32 @@ export class Viewer3D {
       const loader = new GLTFLoader();
       loader.load(glbUrl, (gltf) => {
         if (this.terrainMesh) this.scene.remove(this.terrainMesh);
-        this.terrainMesh = gltf.scene;
+        if (this.wireframeMesh) this.scene.remove(this.wireframeMesh);
 
-        this.terrainMesh.traverse((child) => {
-          if (child.isMesh) {
-            child.material.side = THREE.DoubleSide;
-            child.castShadow = true;
-            child.receiveShadow = true;
+        let targetMesh = null;
+        gltf.scene.traverse((child) => {
+          if (child.isMesh && !targetMesh) {
+            targetMesh = child;
           }
         });
 
+        if (targetMesh) {
+          this.terrainMesh = targetMesh;
+          this.terrainMesh.material.side = THREE.DoubleSide;
+          this.terrainMesh.castShadow = true;
+          this.terrainMesh.receiveShadow = true;
+
+          const wireGeo = new THREE.WireframeGeometry(targetMesh.geometry);
+          const wireMat = new THREE.LineBasicMaterial({ color: 0x00f2fe, transparent: true, opacity: 0.3 });
+          this.wireframeMesh = new THREE.LineSegments(wireGeo, wireMat);
+          this.wireframeMesh.visible = this.showWireframe;
+          this.scene.add(this.wireframeMesh);
+        } else {
+          this.terrainMesh = gltf.scene;
+        }
+
         this.scene.add(this.terrainMesh);
-        this.resetCamera();
+        this.fitCameraToTerrain();
       });
     });
   }
@@ -748,7 +738,6 @@ export class Viewer3D {
       this.controls.update();
     }
 
-    // Cinematic Camera Flythrough animation loop
     if (this.isFlying && this.flyPathSpline) {
       this.flyProgress += this.flySpeed;
       if (this.flyProgress > 1.0) this.flyProgress = 0;
@@ -761,7 +750,6 @@ export class Viewer3D {
       if (this.controls) this.controls.target.copy(lookAtPt);
     }
 
-    // Update 3D Compass Heading Widget
     const compassDir = document.getElementById('compass-arrow');
     if (compassDir) {
       const dir = new THREE.Vector3();

@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
           <!-- Dynamic Elevation Color Legend (Top Right) -->
           <div style="position: absolute; top: 16px; right: 16px; background: rgba(11, 15, 25, 0.85); backdrop-filter: blur(16px); border: 1px solid var(--glass-border); padding: 12px; border-radius: 12px; z-index: 10; display: flex; flex-direction: column; gap: 6px; width: 220px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
-            <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-main);">Elevation Color Legend</div>
+            <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-main);" id="legend-title">RELATIVE DSM (rDSM)</div>
             <div style="height: 12px; border-radius: 6px; background: linear-gradient(90deg, #7f00ff, #31688e, #35b779, #fde725, #ff0000);"></div>
             <div style="display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.74rem; color: var(--accent-cyan);">
               <span id="legend-min-elev">Min: 0m</span>
@@ -448,6 +448,7 @@ function updateMeshStatsHUD(stats) {
   const vEl = document.getElementById('stats-vertices');
   const fEl = document.getElementById('stats-faces');
   const cEl = document.getElementById('stats-cells');
+  const legendTitle = document.getElementById('legend-title');
   const minL = document.getElementById('legend-min-elev');
   const maxL = document.getElementById('legend-max-elev');
   const rangeHUD = document.getElementById('hud-elev-range');
@@ -456,8 +457,11 @@ function updateMeshStatsHUD(stats) {
   if (fEl) fEl.innerText = stats.faces.toLocaleString();
   if (cEl) cEl.innerText = `${stats.sourceCells.toLocaleString()} cells`;
 
-  const unit = stats.unit || 'm';
-  if (minL) minL.innerText = `Min: ${stats.minElev.toFixed(1)}${unit}`;
-  if (maxL) maxL.innerText = `Max: ${stats.maxElev.toFixed(1)}${unit}`;
-  if (rangeHUD) rangeHUD.innerText = `Min: ${stats.minElev.toFixed(1)}${unit} | Max: ${stats.maxElev.toFixed(1)}${unit}`;
+  const isMetric = stats.isCalibrated || stats.unit === 'metres';
+  const unitStr = isMetric ? 'm' : ' (rDSM)';
+
+  if (legendTitle) legendTitle.innerText = isMetric ? 'METRIC DSM ELEVATION' : 'RELATIVE DSM (rDSM)';
+  if (minL) minL.innerText = `Min: ${stats.minElev.toFixed(2)}${unitStr}`;
+  if (maxL) maxL.innerText = `Max: ${stats.maxElev.toFixed(2)}${unitStr}`;
+  if (rangeHUD) rangeHUD.innerText = `Min: ${stats.minElev.toFixed(2)}${unitStr} | Max: ${stats.maxElev.toFixed(2)}${unitStr}`;
 }
