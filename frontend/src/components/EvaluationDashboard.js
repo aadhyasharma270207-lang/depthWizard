@@ -1,23 +1,60 @@
 export function renderEvaluationDashboard(container) {
   container.innerHTML = `
     <div style="padding: 20px; width: 100%; height: 100%; display: flex; flex-direction: column; gap: 20px; overflow-y: auto;">
+      
+      <!-- Section 1: 3D Mesh Geometry & Quality Metrics -->
       <div class="glass-card">
-        <h3>Quantitative DSM Evaluation Metrics</h3>
-        <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">
-          Evaluates estimated metric DSM against Ground Truth DSM (or LiDAR benchmark).
+        <h3 style="font-size: 1.05rem; color: var(--text-main); margin-bottom: 4px;">
+          🗻 3D Mesh Quality & Terrain Structure
+        </h3>
+        <p style="font-size: 0.82rem; color: var(--text-muted);">
+          Structural parameters of the triangulated 3D surface geometry generated from elevation data.
         </p>
 
         <div class="metric-grid" style="margin-top: 16px;">
           <div class="metric-card">
-            <span class="metric-lbl">Root Mean Square Error</span>
+            <span class="metric-lbl">Mesh Vertices Count</span>
+            <span class="metric-val" id="mesh-vertices-val">65,536</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-lbl">Triangular Faces</span>
+            <span class="metric-val" id="mesh-faces-val">130,050</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-lbl">Source DSM Grid Resolution</span>
+            <span class="metric-val" id="mesh-cells-val">512 × 512</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-lbl">Elevation Range (Min / Max)</span>
+            <span class="metric-val" id="mesh-range-val">12.4m - 148.6m</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-lbl">Mean Terrain Height</span>
+            <span class="metric-val" id="mesh-mean-val">54.2 m</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: SIH Accuracy Metrics -->
+      <div class="glass-card">
+        <h3 style="font-size: 1.05rem; color: var(--text-main); margin-bottom: 4px;">
+          📊 Quantitative DSM Accuracy Metrics
+        </h3>
+        <p style="font-size: 0.82rem; color: var(--text-muted);">
+          Empirical accuracy benchmarking against reference Ground Truth DSM / LiDAR data.
+        </p>
+
+        <div class="metric-grid" style="margin-top: 16px;">
+          <div class="metric-card">
+            <span class="metric-lbl">Root Mean Square Error (RMSE)</span>
             <span class="metric-val" id="metric-rmse">1.42 m</span>
           </div>
           <div class="metric-card">
-            <span class="metric-lbl">Mean Absolute Error</span>
+            <span class="metric-lbl">Mean Absolute Error (MAE)</span>
             <span class="metric-val" id="metric-mae">0.98 m</span>
           </div>
           <div class="metric-card">
-            <span class="metric-lbl">Absolute Relative Error</span>
+            <span class="metric-lbl">Absolute Relative Error (AbsRel)</span>
             <span class="metric-val" id="metric-absrel">0.032</span>
           </div>
           <div class="metric-card">
@@ -31,9 +68,10 @@ export function renderEvaluationDashboard(container) {
         </div>
       </div>
 
-      <div class="glass-card" style="flex: 1; display: flex; flex-direction: column;">
-        <h4>Cross-Section Height Profile (Center Slice: GT vs Estimated)</h4>
-        <div style="flex: 1; min-height: 250px; margin-top: 12px; position: relative;">
+      <!-- Section 3: Profile Canvas -->
+      <div class="glass-card" style="min-height: 320px; display: flex; flex-direction: column;">
+        <h4 style="font-size: 0.95rem; color: var(--text-main);">Cross-Section Height Profile Curve (GT vs DepthWizard DSM)</h4>
+        <div style="flex: 1; min-height: 220px; margin-top: 12px; position: relative;">
           <canvas id="profileCanvas" style="width: 100%; height: 100%; display: block;"></canvas>
         </div>
       </div>
@@ -57,7 +95,7 @@ function drawProfileCanvas() {
 
   ctx.clearRect(0, 0, W, H);
 
-  // Draw grid lines
+  // Grid lines
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
   ctx.lineWidth = 1;
   for (let x = 0; x < W; x += 50) {

@@ -1,4 +1,4 @@
-export function renderNavbar(container, onTabChange, onRunDemo) {
+export function renderNavbar(container, onTabChange, onRunDemo, onShowHowToUse) {
   container.innerHTML = `
     <header class="navbar">
       <div class="brand">
@@ -11,7 +11,7 @@ export function renderNavbar(container, onTabChange, onRunDemo) {
 
       <nav class="nav-tabs">
         <button class="tab-btn active" data-tab="viewer">
-          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></button>
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
           3D Flythrough
         </button>
         <button class="tab-btn" data-tab="studio">
@@ -33,14 +33,15 @@ export function renderNavbar(container, onTabChange, onRunDemo) {
           <span class="dot-green"></span>
           <span>Depth Anything V2 (Base)</span>
         </div>
+        <button class="tab-btn" id="btn-how-to-use" style="border: 1px solid var(--glass-border);">❓ How to Use</button>
         <button class="btn-primary" id="btn-quick-demo">🚀 Quick Demo</button>
       </div>
     </header>
   `;
 
-  container.querySelectorAll('.tab-btn').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      container.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+  container.querySelectorAll('.tab-btn[data-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.tab-btn[data-tab]').forEach((b) => b.classList.remove('active'));
       const tabName = btn.dataset.tab;
       btn.classList.add('active');
       onTabChange(tabName);
@@ -48,4 +49,5 @@ export function renderNavbar(container, onTabChange, onRunDemo) {
   });
 
   document.getElementById('btn-quick-demo').addEventListener('click', onRunDemo);
+  document.getElementById('btn-how-to-use').addEventListener('click', onShowHowToUse);
 }
