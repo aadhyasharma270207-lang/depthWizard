@@ -426,3 +426,26 @@ body {
   color: var(--text-muted);
   font-weight: 500;
 }
+
+/* 3D Flythrough Animations & Hover Tooltip */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.hover-tooltip {
+  position: fixed;
+  pointer-events: none;
+  z-index: 1000;
+  background: rgba(11, 15, 25, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--accent-cyan);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-main);
+  box-shadow: 0 8px 24px rgba(0, 242, 254, 0.3);
+  display: none;
+}
+

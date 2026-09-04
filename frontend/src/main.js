@@ -17,6 +17,38 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="viewer-container">
           <div id="canvas3d"></div>
 
+          <!-- Empty State Overlay (Shown before processing) -->
+          <div id="viewer-empty-state" class="glass-card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: absolute; inset: 0; margin: auto; max-width: 460px; height: max-content; padding: 32px 24px; text-align: center; gap: 16px; z-index: 50; box-shadow: 0 16px 48px rgba(0,0,0,0.7);">
+            <div style="font-size: 3rem; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">⛰️</div>
+            <h3 style="font-size: 1.3rem; font-weight: 700; color: var(--text-main);">3D Terrain Viewer</h3>
+            <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;">
+              Generate a DSM from <strong>Depth & DSM Studio</strong> to explore the terrain in interactive 3D.
+            </p>
+            <button class="btn-primary" id="btn-go-to-studio" style="padding: 10px 24px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+              <span>🔍</span> Go to Depth & DSM Studio
+            </button>
+          </div>
+
+          <!-- Step-by-Step Loading State Overlay (Shown during 3D terrain building) -->
+          <div id="viewer-loading-state" class="glass-card" style="display: none; flex-direction: column; align-items: center; justify-content: center; position: absolute; inset: 0; margin: auto; max-width: 420px; height: max-content; padding: 28px; text-align: center; gap: 14px; z-index: 50; box-shadow: 0 16px 48px rgba(0,0,0,0.7);">
+            <div class="loading-spinner" style="width: 38px; height: 38px; border: 3px solid rgba(0,242,254,0.2); border-top-color: var(--accent-cyan); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <h4 style="font-size: 1.1rem; font-weight: 700; color: var(--text-main);" id="loading-title">Generating 3D Terrain...</h4>
+            <div id="loading-steps" style="display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: 0.78rem; text-align: left; width: 100%; color: var(--text-muted);">
+              <div id="step-data">⚪ Loading elevation data...</div>
+              <div id="step-mesh">⚪ Building 3D mesh geometry...</div>
+              <div id="step-normals">⚪ Computing vertex normals...</div>
+              <div id="step-colors">⚪ Applying elevation colors...</div>
+              <div id="step-camera">⚪ Framing camera frustum...</div>
+            </div>
+          </div>
+
+          <!-- Hover Tooltip Element -->
+          <div id="hover-tooltip" class="hover-tooltip">
+            <div id="tt-elev" style="color: var(--accent-cyan); font-weight: 700;">Elevation: --</div>
+            <div id="tt-slope">Slope: --°</div>
+            <div id="tt-pos" style="color: var(--text-muted); font-size: 0.7rem;">X: -- | Z: --</div>
+          </div>
+
           <!-- Left Floating Glassmorphic 3D Controls Panel -->
           <div class="viewer-controls-panel glass-card" id="controls-panel">
             <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 8px; margin-bottom: 8px;">
@@ -146,11 +178,27 @@ document.addEventListener('DOMContentLoaded', () => {
               <div class="controls-group" style="border-top: 1px solid var(--glass-border); padding-top: 8px;">
                 <label>3D Mesh Geometry Quality</label>
                 <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent-cyan); background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; border: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 4px;">
-                  <div>Vertices: <strong id="stats-vertices">65,536</strong></div>
-                  <div>Triangles: <strong id="stats-faces">130,050</strong></div>
-                  <div>Source DSM: <strong id="stats-cells">512 × 512 cells</strong></div>
+                  <div>Vertices: <strong id="stats-vertices">--</strong></div>
+                  <div>Triangles: <strong id="stats-faces">--</strong></div>
+                  <div>Source DSM: <strong id="stats-cells">--</strong></div>
                 </div>
               </div>
+
+              <!-- Collapsible Developer Debug Status -->
+              <details class="controls-group" style="border-top: 1px solid var(--glass-border); padding-top: 8px;">
+                <summary style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none;">
+                  🛠 Developer Debug Status
+                </summary>
+                <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--accent-cyan); display: flex; flex-direction: column; gap: 3px; margin-top: 6px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; border: 1px solid var(--glass-border);">
+                  <div>3D Renderer: <strong id="dbg-renderer" style="color: var(--accent-green);">READY</strong></div>
+                  <div>DSM Data: <strong id="dbg-dsm">WAITING</strong></div>
+                  <div>Mesh: <strong id="dbg-mesh">UNINITIALIZED</strong></div>
+                  <div>Vertices: <strong id="dbg-verts">0</strong></div>
+                  <div>Triangles: <strong id="dbg-tris">0</strong></div>
+                  <div>Elevation Range: <strong id="dbg-range">--</strong></div>
+                  <div>WebGL: <strong id="dbg-webgl" style="color: var(--accent-green);">READY</strong></div>
+                </div>
+              </details>
 
               <button class="tab-btn" id="btn-fullscreen" style="padding: 8px; margin-top: 4px;">⛶ Fullscreen Viewport</button>
             </div>
@@ -159,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <!-- Dynamic Elevation Color Legend (Top Right) -->
           <div style="position: absolute; top: 16px; right: 16px; background: rgba(11, 15, 25, 0.85); backdrop-filter: blur(16px); border: 1px solid var(--glass-border); padding: 12px; border-radius: 12px; z-index: 10; display: flex; flex-direction: column; gap: 6px; width: 220px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
             <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-main);" id="legend-title">RELATIVE DSM (rDSM)</div>
-            <div style="height: 12px; border-radius: 6px; background: linear-gradient(90deg, #7f00ff, #31688e, #35b779, #fde725, #ff0000);"></div>
+            <div style="height: 12px; border-radius: 6px; background: linear-gradient(90deg, #3b0764, #06b6d4, #10b981, #f59e0b, #ef4444);"></div>
             <div style="display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.74rem; color: var(--accent-cyan);">
               <span id="legend-min-elev">Min: 0m</span>
               <span id="legend-max-elev">Max: 100m</span>
@@ -290,6 +338,19 @@ document.addEventListener('DOMContentLoaded', () => {
       btnTogglePanel.innerText = '+';
     }
   });
+
+  // Empty State "Go to Depth & DSM Studio" button listener
+  const btnGoStudio = document.getElementById('btn-go-to-studio');
+  if (btnGoStudio) {
+    btnGoStudio.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn[data-tab]').forEach((b) => b.classList.remove('active'));
+      const studioTabBtn = document.querySelector('.tab-btn[data-tab="studio"]');
+      if (studioTabBtn) studioTabBtn.classList.add('active');
+
+      document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.remove('active'));
+      document.getElementById('tab-studio').classList.add('active');
+    });
+  }
 
   // Vertical Exaggeration Slider
   document.getElementById('slider-exagg').addEventListener('input', (e) => {

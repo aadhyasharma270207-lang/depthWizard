@@ -16,7 +16,7 @@ export class Viewer3D {
     // 3D Scene setup
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0b0f19);
-    this.scene.fog = new THREE.FogExp2(0x0b0f19, 0.0015);
+    this.scene.fog = new THREE.FogExp2(0x0b0f19, 0.0012);
 
     // Camera setup
     this.camera = new THREE.PerspectiveCamera(
@@ -57,6 +57,7 @@ export class Viewer3D {
     this.wireframeMesh = null;
     this.contourGroup = null;
     this.gridHelper = null;
+    this.heightsArray = null;
 
     this.elevationGrid = null;
     this.slopeGrid = null;
@@ -65,6 +66,7 @@ export class Viewer3D {
     this.rawHeight = 0;
     this.unit = 'relative'; // 'relative' or 'metres'
     this.isCalibrated = false;
+    this.hasUserData = false;
 
     this.minElev = 0;
     this.maxElev = 1.0;
@@ -101,7 +103,6 @@ export class Viewer3D {
     this.setupLighting();
     this.setupHoverMarker();
     this.setupEvents();
-    this.createProceduralPlaceholderTerrain();
     this.animate();
   }
 
@@ -157,31 +158,19 @@ export class Viewer3D {
       const rect = this.container.getBoundingClientRect();
       this.mouse.x = ((e.clientX - rect.left) / this.container.clientWidth) * 2 - 1;
       this.mouse.y = -((e.clientY - rect.top) / this.container.clientHeight) * 2 + 1;
-      this.inspectHoverPoint();
+      this.inspectHoverPoint(e);
+    });
+
+    this.container.addEventListener('mouseleave', () => {
+      const tooltip = document.getElementById('hover-tooltip');
+      if (tooltip) tooltip.style.display = 'none';
+      if (this.hoverMarker) this.hoverMarker.visible = false;
+      if (this.hoverLaserLine) this.hoverLaserLine.visible = false;
     });
 
     this.container.addEventListener('click', () => {
       this.handleTerrainClick();
     });
-  }
-
-  /**
-   * Procedural Placeholder Terrain shown when no user dataset is loaded yet.
-   */
-  createProceduralPlaceholderTerrain() {
-    const W = 80, H = 80;
-    const grid = [];
-    for (let i = 0; i < H; i++) {
-      const row = [];
-      for (let j = 0; j < W; j++) {
-        const x = (j - W / 2) * 0.08;
-        const y = (i - H / 2) * 0.08;
-        const val = Math.sin(x) * Math.cos(y) * 28 + Math.sin(x * 0.4) * 18 + 35;
-        row.push(val);
-      }
-      grid.push(row);
-    }
-    this.buildTerrainFromElevationGrid(grid, null, null, 'relative', false, 'Placeholder Preview');
   }
 
   /**
@@ -196,8 +185,8 @@ export class Viewer3D {
 
     this.camera.position.set(
       center.x,
-      center.y + maxDim * 0.95 + 100,
-      center.z + maxDim * 1.1 + 100
+      center.y + maxDim * 0.85 + 60,
+      center.z + maxDim * 1.0 + 80
     );
     this.camera.lookAt(center);
     if (this.controls) {
@@ -236,14 +225,14 @@ export class Viewer3D {
     const W = Math.floor((rawW - 1) / stride) + 1;
 
     let minE = Infinity, maxE = -Infinity, sumE = 0, count = 0;
-    const heights = new Float32Array(H * W);
+    this.heightsArray = new Float32Array(H * W);
 
     for (let i = 0; i < H; i++) {
       for (let j = 0; j < W; j++) {
         const rIdx = Math.min(rawH - 1, i * stride);
         const cIdx = Math.min(rawW - 1, j * stride);
         const val = grid2D[rIdx][cIdx];
-        heights[i * W + j] = val;
+        this.heightsArray[i * W + j] = val;
         if (!isNaN(val) && isFinite(val)) {
           if (val < minE) minE = val;
           if (val > maxE) maxE = val;
@@ -269,7 +258,7 @@ export class Viewer3D {
         const idx = i * W + j;
         const x = (j / (W - 1) - 0.5) * aspectW;
         const z = (i / (H - 1) - 0.5) * aspectH;
-        const ele = heights[idx];
+        const ele = this.heightsArray[idx];
 
         positions[idx * 3] = x;
         positions[idx * 3 + 1] = ele * this.heightExaggeration;
@@ -310,10 +299,21 @@ export class Viewer3D {
       roughness: 0.55,
       metalness: 0.15,
       flatShading: this.shadingMode === 'flat',
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
     });
 
-    if (this.terrainMesh) this.scene.remove(this.terrainMesh);
-    if (this.wireframeMesh) this.scene.remove(this.wireframeMesh);
+    if (this.terrainMesh) {
+      if (this.terrainMesh.geometry) this.terrainMesh.geometry.dispose();
+      if (this.terrainMesh.material) this.terrainMesh.material.dispose();
+      this.scene.remove(this.terrainMesh);
+    }
+    if (this.wireframeMesh) {
+      if (this.wireframeMesh.geometry) this.wireframeMesh.geometry.dispose();
+      if (this.wireframeMesh.material) this.wireframeMesh.material.dispose();
+      this.scene.remove(this.wireframeMesh);
+    }
     if (this.contourGroup) this.scene.remove(this.contourGroup);
 
     this.terrainMesh = new THREE.Mesh(geometry, material);
@@ -322,7 +322,7 @@ export class Viewer3D {
     this.scene.add(this.terrainMesh);
 
     const wireGeo = new THREE.WireframeGeometry(geometry);
-    const wireMat = new THREE.LineBasicMaterial({ color: 0x00f2fe, transparent: true, opacity: 0.3 });
+    const wireMat = new THREE.LineBasicMaterial({ color: 0x00f2fe, transparent: true, opacity: 0.35 });
     this.wireframeMesh = new THREE.LineSegments(wireGeo, wireMat);
     this.wireframeMesh.visible = this.showWireframe;
     this.scene.add(this.wireframeMesh);
@@ -341,6 +341,7 @@ export class Viewer3D {
 
     this.rebuildContourLines();
     this.fitCameraToTerrain();
+    this.updateDebugPanel(H * W, indices.length / 3, rawW, rawH);
 
     if (this.onStatsUpdated) {
       this.onStatsUpdated({
@@ -357,16 +358,54 @@ export class Viewer3D {
     }
   }
 
+  updateDebugPanel(verts, tris, rawW, rawH) {
+    const dbgRenderer = document.getElementById('dbg-renderer');
+    const dbgDsm = document.getElementById('dbg-dsm');
+    const dbgMesh = document.getElementById('dbg-mesh');
+    const dbgVerts = document.getElementById('dbg-verts');
+    const dbgTris = document.getElementById('dbg-tris');
+    const dbgRange = document.getElementById('dbg-range');
+    const dbgWebgl = document.getElementById('dbg-webgl');
+
+    if (dbgRenderer) dbgRenderer.style.color = 'var(--accent-green)';
+    if (dbgDsm) {
+      dbgDsm.innerText = 'READY';
+      dbgDsm.style.color = 'var(--accent-green)';
+    }
+    if (dbgMesh) {
+      dbgMesh.innerText = `${rawW}x${rawH}`;
+      dbgMesh.style.color = 'var(--accent-cyan)';
+    }
+    if (dbgVerts) dbgVerts.innerText = verts.toLocaleString();
+    if (dbgTris) dbgTris.innerText = tris.toLocaleString();
+    if (dbgRange) dbgRange.innerText = `${this.minElev.toFixed(1)} – ${this.maxElev.toFixed(1)} ${this.unit === 'metres' ? 'm' : 'rDSM'}`;
+    if (dbgWebgl) dbgWebgl.style.color = 'var(--accent-green)';
+  }
+
   getElevationColor(normH) {
+    const clamped = Math.min(1.0, Math.max(0.0, normH));
     const color = new THREE.Color();
-    if (normH < 0.25) {
-      color.setHSL(0.75 - normH * 0.6, 0.9, 0.45);
-    } else if (normH < 0.5) {
-      color.setHSL(0.6 - (normH - 0.25) * 0.8, 0.95, 0.5);
-    } else if (normH < 0.75) {
-      color.setHSL(0.4 - (normH - 0.5) * 0.9, 0.95, 0.55);
+    
+    // Smooth 5-stop turbo terrain gradient:
+    // 0.00: Deep Purple (#3b0764)
+    // 0.25: Vibrant Cyan (#06b6d4)
+    // 0.50: Emerald Green (#10b981)
+    // 0.75: Golden Yellow (#f59e0b)
+    // 1.00: Crimson Red (#ef4444)
+    const c0 = new THREE.Color(0x3b0764);
+    const c1 = new THREE.Color(0x06b6d4);
+    const c2 = new THREE.Color(0x10b981);
+    const c3 = new THREE.Color(0xf59e0b);
+    const c4 = new THREE.Color(0xef4444);
+
+    if (clamped < 0.25) {
+      color.copy(c0).lerp(c1, clamped / 0.25);
+    } else if (clamped < 0.50) {
+      color.copy(c1).lerp(c2, (clamped - 0.25) / 0.25);
+    } else if (clamped < 0.75) {
+      color.copy(c2).lerp(c3, (clamped - 0.50) / 0.25);
     } else {
-      color.setHSL(0.17 - (normH - 0.75) * 0.68, 1.0, 0.52);
+      color.copy(c3).lerp(c4, (clamped - 0.75) / 0.25);
     }
     return color;
   }
@@ -474,7 +513,23 @@ export class Viewer3D {
 
   setExaggeration(factor) {
     this.heightExaggeration = factor;
-    if (this.elevationGrid) {
+    if (this.terrainMesh && this.heightsArray) {
+      const geo = this.terrainMesh.geometry;
+      const pos = geo.attributes.position;
+      const count = pos.count;
+
+      for (let i = 0; i < count; i++) {
+        pos.setY(i, this.heightsArray[i] * factor);
+      }
+      pos.needsUpdate = true;
+      geo.computeVertexNormals();
+
+      if (this.wireframeMesh) {
+        this.wireframeMesh.geometry.dispose();
+        this.wireframeMesh.geometry = new THREE.WireframeGeometry(geo);
+      }
+      this.rebuildContourLines();
+    } else if (this.elevationGrid) {
       this.buildTerrainFromElevationGrid(
         this.elevationGrid,
         null,
@@ -483,9 +538,6 @@ export class Viewer3D {
         this.isCalibrated,
         'Custom DSM'
       );
-    } else if (this.terrainMesh) {
-      this.terrainMesh.scale.y = factor;
-      if (this.wireframeMesh) this.wireframeMesh.scale.y = factor;
     }
   }
 
@@ -530,7 +582,7 @@ export class Viewer3D {
   /**
    * Raycasting & Hover Inspection HUD (Real Elevation Unexaggerated)
    */
-  inspectHoverPoint() {
+  inspectHoverPoint(e = null) {
     if (!this.terrainMesh) return;
     this.raycaster.setFromCamera(this.mouse, this.camera);
     const intersects = this.raycaster.intersectObject(this.terrainMesh, true);
@@ -538,6 +590,10 @@ export class Viewer3D {
     const hudElev = document.getElementById('hud-elevation');
     const hudSlope = document.getElementById('hud-slope');
     const hudPos = document.getElementById('hud-pos');
+    const tooltip = document.getElementById('hover-tooltip');
+    const ttElev = document.getElementById('tt-elev');
+    const ttSlope = document.getElementById('tt-slope');
+    const ttPos = document.getElementById('tt-pos');
 
     if (intersects.length > 0) {
       const pt = intersects[0].point;
@@ -567,9 +623,19 @@ export class Viewer3D {
       if (hudElev) hudElev.innerHTML = elevText;
       if (hudSlope) hudSlope.innerText = `Slope: ${slopeDeg}°`;
       if (hudPos) hudPos.innerText = `X: ${pt.x.toFixed(1)} | Z: ${pt.z.toFixed(1)}`;
+
+      if (tooltip && e) {
+        tooltip.style.display = 'block';
+        tooltip.style.left = `${e.clientX + 16}px`;
+        tooltip.style.top = `${e.clientY + 16}px`;
+        if (ttElev) ttElev.innerHTML = `Elev: ${realEle.toFixed(2)}${isMetric ? 'm' : ''}`;
+        if (ttSlope) ttSlope.innerText = `Slope: ${slopeDeg}°`;
+        if (ttPos) ttPos.innerText = `X: ${pt.x.toFixed(1)} | Z: ${pt.z.toFixed(1)}`;
+      }
     } else {
       this.hoverMarker.visible = false;
       this.hoverLaserLine.visible = false;
+      if (tooltip) tooltip.style.display = 'none';
     }
   }
 
@@ -633,18 +699,19 @@ export class Viewer3D {
     const box = new THREE.Box3().setFromObject(this.terrainMesh);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.z, size.y);
 
     if (mode === 'topdown') {
-      this.camera.position.set(center.x, center.y + size.y + 450, center.z + 1);
+      this.camera.position.set(center.x, center.y + maxDim * 1.6, center.z + 0.1);
       this.camera.lookAt(center);
     } else if (mode === 'perspective') {
-      this.camera.position.set(center.x + size.x * 0.8, center.y + 160, center.z + size.z * 0.9);
+      this.camera.position.set(center.x + maxDim * 0.8, center.y + maxDim * 0.6, center.z + maxDim * 0.8);
       this.camera.lookAt(center);
     } else if (mode === 'lowfly') {
-      this.camera.position.set(center.x - size.x * 0.4, center.y + 35, center.z + size.z * 0.4);
+      this.camera.position.set(center.x - maxDim * 0.4, center.y + size.y * 0.4 + 20, center.z + maxDim * 0.4);
       this.camera.lookAt(center.x, center.y + 20, center.z);
     } else if (mode === 'highfly') {
-      this.camera.position.set(center.x, center.y + 600, center.z + 400);
+      this.camera.position.set(center.x, center.y + maxDim * 2.0, center.z + maxDim * 1.2);
       this.camera.lookAt(center);
     } else if (mode === 'inspection') {
       this.camera.position.set(center.x + 60, center.y + 45, center.z + 60);
@@ -665,14 +732,14 @@ export class Viewer3D {
     const box = new THREE.Box3().setFromObject(this.terrainMesh);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const radius = Math.max(size.x, size.z) * 0.7 + 50;
+    const radius = Math.max(size.x, size.z) * 0.75 + 60;
 
     const points = [];
     for (let i = 0; i <= 8; i++) {
       const angle = (i / 8) * Math.PI * 2;
       const x = center.x + Math.cos(angle) * radius;
       const z = center.z + Math.sin(angle) * radius;
-      const y = center.y + 80 + Math.sin(angle * 3) * 30;
+      const y = center.y + size.y * 0.5 + 70 + Math.sin(angle * 3) * 25;
       points.push(new THREE.Vector3(x, y, z));
     }
     this.flyPathSpline = new THREE.CatmullRomCurve3(points, true);
@@ -709,7 +776,7 @@ export class Viewer3D {
           this.terrainMesh.receiveShadow = true;
 
           const wireGeo = new THREE.WireframeGeometry(targetMesh.geometry);
-          const wireMat = new THREE.LineBasicMaterial({ color: 0x00f2fe, transparent: true, opacity: 0.3 });
+          const wireMat = new THREE.LineBasicMaterial({ color: 0x00f2fe, transparent: true, opacity: 0.35 });
           this.wireframeMesh = new THREE.LineSegments(wireGeo, wireMat);
           this.wireframeMesh.visible = this.showWireframe;
           this.scene.add(this.wireframeMesh);
@@ -724,15 +791,37 @@ export class Viewer3D {
   }
 
   async fetchGridAndBuildTerrain(jobId) {
-    const dbgDsm = document.getElementById('dbg-dsm');
-    if (dbgDsm) dbgDsm.innerText = 'LOADING...';
+    const emptyState = document.getElementById('viewer-empty-state');
+    const loadingState = document.getElementById('viewer-loading-state');
+    const stepData = document.getElementById('step-data');
+    const stepMesh = document.getElementById('step-mesh');
+    const stepNormals = document.getElementById('step-normals');
+    const stepColors = document.getElementById('step-colors');
+    const stepCamera = document.getElementById('step-camera');
+
+    if (emptyState) emptyState.style.display = 'none';
+    if (loadingState) loadingState.style.display = 'flex';
+
+    if (stepData) stepData.innerHTML = '🟡 Loading elevation grid data...';
+    if (stepMesh) stepMesh.innerHTML = '⚪ Building 3D mesh geometry...';
+    if (stepNormals) stepNormals.innerHTML = '⚪ Computing vertex normals...';
+    if (stepColors) stepColors.innerHTML = '⚪ Applying elevation colors...';
+    if (stepCamera) stepCamera.innerHTML = '⚪ Framing camera frustum...';
 
     try {
-      const res = await fetch(`/api/jobs/${jobId}/grid?max_size=256`);
+      const res = await fetch(`/api/jobs/${jobId}/grid?max_size=512`);
       if (!res.ok) throw new Error('Grid fetch failed');
       const data = await res.json();
 
+      if (stepData) stepData.innerHTML = '🟢 Elevation data loaded';
+      if (stepMesh) stepMesh.innerHTML = '🟡 Building 3D mesh geometry...';
+      await new Promise(r => setTimeout(r, 60));
+
       const previewUrl = `/api/jobs/${jobId}/preview`;
+      
+      if (stepNormals) stepNormals.innerHTML = '🟡 Computing vertex normals...';
+      if (stepColors) stepColors.innerHTML = '🟡 Applying elevation colors...';
+
       this.buildTerrainFromElevationGrid(
         data.elevations,
         previewUrl,
@@ -742,17 +831,19 @@ export class Viewer3D {
         `Job ${jobId}`
       );
 
-      if (dbgDsm) {
-        dbgDsm.innerText = 'READY';
-        dbgDsm.style.color = 'var(--accent-green)';
-      }
+      if (stepMesh) stepMesh.innerHTML = '🟢 Mesh geometry created';
+      if (stepNormals) stepNormals.innerHTML = '🟢 Vertex normals computed';
+      if (stepColors) stepColors.innerHTML = '🟢 Elevation colors applied';
+      if (stepCamera) stepCamera.innerHTML = '🟢 Camera frustum framed';
+
+      await new Promise(r => setTimeout(r, 180));
+      if (loadingState) loadingState.style.display = 'none';
+      this.hasUserData = true;
     } catch (err) {
       console.warn('Fallback GLB loader for job:', jobId, err);
       this.loadGLBMesh(`/api/jobs/${jobId}/mesh`);
-      if (dbgDsm) {
-        dbgDsm.innerText = 'GLB MESH';
-        dbgDsm.style.color = 'var(--accent-cyan)';
-      }
+      if (loadingState) loadingState.style.display = 'none';
+      this.hasUserData = true;
     }
   }
 
@@ -776,7 +867,7 @@ export class Viewer3D {
       if (this.flyProgress > 1.0) this.flyProgress = 0;
 
       const pos = this.flyPathSpline.getPointAt(this.flyProgress);
-      const lookAtPt = this.flyPathSpline.getPointAt((this.flyProgress + 0.05) % 1.0);
+      const lookAtPt = this.flyPathSpline.getPointAt((this.flyProgress + 0.03) % 1.0);
 
       this.camera.position.copy(pos);
       this.camera.lookAt(lookAtPt);
@@ -799,3 +890,4 @@ export class Viewer3D {
     this.renderer.render(this.scene, this.camera);
   }
 }
+
