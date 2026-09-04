@@ -266,6 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
       onPointSelected: (pts) => updateInspectorPointsList(pts),
       onStatsUpdated: (stats) => updateMeshStatsHUD(stats),
     });
+    window.__VIEWER3D_INSTANCE__ = viewer;
   } catch (err) {
     console.warn('3D Hero Viewer initialization warning:', err);
   }

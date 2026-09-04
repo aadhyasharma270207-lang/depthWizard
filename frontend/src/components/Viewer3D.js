@@ -1219,33 +1219,76 @@ export class Viewer3D {
       this.renderer.render(this.scene, this.camera);
     }
   }
+
+  async updateTerrainFromActiveUpload(inputImageSrc, dsmImageSrc = null) {
+    if (!dsmImageSrc && !inputImageSrc) return;
+    const src = dsmImageSrc || inputImageSrc;
+    const heightData = await computeHeightsFromActiveUpload(src, 127);
+    if (!heightData) return;
+
+    const W = 128, H = 128;
+    const grid = [];
+    for (let i = 0; i < H; i++) {
+      const row = [];
+      for (let j = 0; j < W; j++) {
+        const val = heightData[i * W + j] * 40.0;
+        row.push(val);
+      }
+      grid.push(row);
+    }
+
+    this.buildTerrainFromElevationGrid(grid, inputImageSrc, null, 'relative', false, 'Active Uploaded File');
+    this.hasUserData = true;
+    this.fitCameraToTerrain();
+  }
+}
+
+/**
+ * Reads pixel data directly from the active user upload or DSM output
+ * to generate dynamic vertex elevations without caching.
+ */
+export async function computeHeightsFromActiveUpload(imageSrc, resolution = 127) {
+  if (!imageSrc) return null;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = resolution + 1;
+      canvas.height = resolution + 1;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, resolution + 1, resolution + 1);
+
+      const pixelData = ctx.getImageData(0, 0, resolution + 1, resolution + 1).data;
+      const count = (resolution + 1) * (resolution + 1);
+      const heights = new Float32Array(count);
+
+      // Extract normalized elevation [0.0, 1.0] from image pixels
+      for (let i = 0; i < count; i++) {
+        const r = pixelData[i * 4];
+        const g = pixelData[i * 4 + 1];
+        const b = pixelData[i * 4 + 2];
+        // Standard perceptual luminance
+        heights[i] = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
+      }
+      resolve(heights);
+    };
+
+    img.onerror = () => {
+      console.error('Failed to load user image for 3D elevation:', imageSrc);
+      resolve(null);
+    };
+
+    img.src = imageSrc;
+  });
 }
 
 /**
  * Client-side luminance height extractor for 2D elevation images.
  */
 export async function extractHeightsFromDsmImage(imageUrl, gridWidth = 128, gridHeight = 128) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const offCanvas = document.createElement('canvas');
-      offCanvas.width = gridWidth;
-      offCanvas.height = gridHeight;
-      const ctx = offCanvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, gridWidth, gridHeight);
-      const imgData = ctx.getImageData(0, 0, gridWidth, gridHeight).data;
-      const heights = new Float32Array(gridWidth * gridHeight);
-      for (let i = 0; i < heights.length; i++) {
-        const r = imgData[i * 4];
-        const g = imgData[i * 4 + 1];
-        const b = imgData[i * 4 + 2];
-        heights[i] = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
-      }
-      resolve({ heights, width: gridWidth, height: gridHeight });
-    };
-    img.onerror = () => resolve(null);
-    img.src = imageUrl;
-  });
+  return computeHeightsFromActiveUpload(imageUrl, gridWidth - 1).then(h => h ? { heights: h, width: gridWidth, height: gridHeight } : null);
 }
 

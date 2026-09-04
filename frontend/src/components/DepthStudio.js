@@ -122,6 +122,10 @@ export function renderDepthStudio(container, onJobComplete, onViewMeshClicked) {
         inputImg.src = ev.target.result;
         inputImg.style.display = 'block';
         document.getElementById('placeholder-input').style.display = 'none';
+
+        if (window.__VIEWER3D_INSTANCE__) {
+          window.__VIEWER3D_INSTANCE__.updateTerrainFromActiveUpload(ev.target.result, null);
+        }
       };
       reader.readAsDataURL(file);
     }
