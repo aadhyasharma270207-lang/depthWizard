@@ -172,7 +172,7 @@ body {
 }
 
 /* Layout */
-.main-content {
+.main-content, .tab-content-wrapper {
   flex: 1;
   display: flex;
   position: relative;
@@ -185,9 +185,10 @@ body {
   display: none;
   width: 100%;
   height: 100%;
-  overflow-y: auto;
+  overflow-y: auto !important;
   overflow-x: hidden;
   box-sizing: border-box;
+  padding-bottom: 5rem;
 }
 
 .tab-panel.active {
@@ -195,7 +196,8 @@ body {
 }
 
 #tab-viewer {
-  overflow: hidden;
+  overflow: hidden !important;
+  padding-bottom: 0 !important;
 }
 
 /* Glass Card */
