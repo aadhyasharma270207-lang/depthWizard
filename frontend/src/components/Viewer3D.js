@@ -1225,24 +1225,25 @@ export class Viewer3D {
   }
 
   async syncMeshToNewInput(uploadedRgbUrl, activeDsmUrl = null, shadingMode = 'elevation') {
-    const targetImage = activeDsmUrl || uploadedRgbUrl;
+    const targetImage = activeDsmUrl || uploadedRgbUrl || (typeof window !== 'undefined' ? window.__ACTIVE_UPLOADED_IMAGE__ : null);
     if (!targetImage || !this.terrainMesh || !this.terrainMesh.geometry) return;
 
     const gridRes = 127;
-    const dynamicHeights = await computeHeightsFromActiveUpload(targetImage, gridRes);
-    if (!dynamicHeights) return;
+    const heights = await parseLuminanceFromImage(targetImage, gridRes + 1);
+    if (!heights) return;
 
     const pos = this.terrainMesh.geometry.attributes.position;
     const colorsAttr = this.terrainMesh.geometry.attributes.color;
     const colors = colorsAttr ? colorsAttr.array : null;
 
     for (let i = 0; i < pos.count; i++) {
-      const normHeight = dynamicHeights[i];
-      const h = (normHeight * 38.0) - 12.0;
-      pos.setY(i, h * (this.heightExaggeration || 1.0));
+      const norm = heights[i];
+      // Displace height uniquely according to this specific image's pixels
+      const elevation = (norm * 40.0) - 12.0;
+      pos.setY(i, elevation * (this.heightExaggeration || 1.0));
 
       if (colors) {
-        const col = this.getElevationColor(normHeight);
+        const col = this.getElevationColor(norm);
         colors[i * 3] = col.r;
         colors[i * 3 + 1] = col.g;
         colors[i * 3 + 2] = col.b;
@@ -1253,17 +1254,20 @@ export class Viewer3D {
     if (colorsAttr) colorsAttr.needsUpdate = true;
     this.terrainMesh.geometry.computeVertexNormals();
 
+    // Rebuild side skirt walls to match the new unique perimeter (disposes old skirt geometry)
     const H = 128, W = 128;
     const aspectW = 300.0;
     const aspectH = 300.0;
     this.buildVolumetricBlockSkirts(H, W, aspectW, aspectH, -35.0);
 
-    if (uploadedRgbUrl && this.terrainMesh.material) {
-      new THREE.TextureLoader().load(uploadedRgbUrl, (newTexture) => {
-        newTexture.needsUpdate = true;
-        this.rgbTexture = newTexture;
-        if (shadingMode === 'rgb' || shadingMode === 'textured') {
-          this.terrainMesh.material.map = newTexture;
+    // Drape the uploaded photo directly over the new surface
+    const textureUrl = uploadedRgbUrl || targetImage;
+    if (textureUrl && this.terrainMesh.material) {
+      new THREE.TextureLoader().load(textureUrl, (texture) => {
+        texture.needsUpdate = true;
+        this.rgbTexture = texture;
+        if (shadingMode === 'rgb' || shadingMode === 'textured' || this.colorMode === 'textured') {
+          this.terrainMesh.material.map = texture;
           this.terrainMesh.material.vertexColors = false;
           this.terrainMesh.material.needsUpdate = true;
         }
