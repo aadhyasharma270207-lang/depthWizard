@@ -380,7 +380,7 @@ export class Viewer3D {
     this.wireframeMesh.visible = this.showWireframe;
     this.scene.add(this.wireframeMesh);
 
-    this.buildVolumetricBlockSkirts(H, W, aspectW, aspectH, -30.0);
+    this.buildVolumetricBlockSkirts(H, W, aspectW, aspectH, -35.0);
 
     if (rgbTextureUrl) {
       const loader = new THREE.TextureLoader();
@@ -416,7 +416,7 @@ export class Viewer3D {
   /**
    * Constructs vertical side skirts and a solid bottom cap to create a 3D volumetric terrain block.
    */
-  buildVolumetricBlockSkirts(H, W, aspectW, aspectH, baseY = -30.0) {
+  buildVolumetricBlockSkirts(H, W, aspectW, aspectH, baseY = -35.0) {
     if (this.skirtGroup) {
       this.skirtGroup.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
@@ -427,11 +427,8 @@ export class Viewer3D {
 
     this.skirtGroup = new THREE.Group();
     const skirtMat = new THREE.MeshStandardMaterial({
-      color: 0x1e2638,
-      roughness: 0.6,
-      metalness: 0.2,
-      opacity: 0.95,
-      transparent: true,
+      color: 0x1a2333,
+      roughness: 0.85,
       side: THREE.DoubleSide,
     });
 
