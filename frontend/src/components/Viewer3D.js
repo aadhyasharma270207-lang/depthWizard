@@ -15,17 +15,17 @@ export class Viewer3D {
 
     // 3D Scene setup
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0b0f19);
-    this.scene.fog = new THREE.FogExp2(0x0b0f19, 0.0012);
+    this.scene.background = new THREE.Color(0x060913);
+    this.scene.fog = new THREE.FogExp2(0x060913, 0.0012);
 
     // Camera setup
     this.camera = new THREE.PerspectiveCamera(
       55,
-      this.container.clientWidth / this.container.clientHeight,
+      (this.container.clientWidth || 800) / (this.container.clientHeight || 600),
       0.1,
       5000
     );
-    this.camera.position.set(0, 220, 320);
+    this.camera.position.set(120, 100, 120);
 
     // Renderer setup
     this.renderer = new THREE.WebGLRenderer({
@@ -33,11 +33,18 @@ export class Viewer3D {
       alpha: true,
       powerPreference: 'high-performance',
     });
-    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    this.renderer.setClearColor(0x060913, 1);
+    this.renderer.setSize(this.container.clientWidth || 800, this.container.clientHeight || 600);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);
+
+    // Resize Observer for canvas mounting safety
+    this.resizeObserver = new ResizeObserver(() => {
+      this.handleResize();
+    });
+    this.resizeObserver.observe(this.container);
 
     // Orbit Controls
     try {
@@ -369,7 +376,7 @@ export class Viewer3D {
     this.wireframeMesh.visible = this.showWireframe;
     this.scene.add(this.wireframeMesh);
 
-    this.buildVolumetricBlockSkirts(H, W, aspectW, aspectH, -15.0);
+    this.buildVolumetricBlockSkirts(H, W, aspectW, aspectH, -30.0);
 
     if (rgbTextureUrl) {
       const loader = new THREE.TextureLoader();
@@ -405,7 +412,7 @@ export class Viewer3D {
   /**
    * Constructs vertical side skirts and a solid bottom cap to create a 3D volumetric terrain block.
    */
-  buildVolumetricBlockSkirts(H, W, aspectW, aspectH, baseY = -15.0) {
+  buildVolumetricBlockSkirts(H, W, aspectW, aspectH, baseY = -30.0) {
     if (this.skirtGroup) {
       this.skirtGroup.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
@@ -416,9 +423,11 @@ export class Viewer3D {
 
     this.skirtGroup = new THREE.Group();
     const skirtMat = new THREE.MeshStandardMaterial({
-      color: 0x1c2438,
-      roughness: 0.85,
+      color: 0x1e2638,
+      roughness: 0.6,
       metalness: 0.2,
+      opacity: 0.95,
+      transparent: true,
       side: THREE.DoubleSide,
     });
 
@@ -831,19 +840,19 @@ export class Viewer3D {
     const maxDim = Math.max(size.x, size.z, size.y);
 
     if (mode === 'topdown') {
-      this.camera.position.set(center.x, center.y + maxDim * 1.6, center.z + 0.1);
+      this.camera.position.set(center.x, center.y + 180, center.z + 0.1);
       this.camera.lookAt(center);
     } else if (mode === 'perspective') {
-      this.camera.position.set(center.x + maxDim * 0.8, center.y + maxDim * 0.6, center.z + maxDim * 0.8);
+      this.camera.position.set(center.x + 100, center.y + 80, center.z + 100);
       this.camera.lookAt(center);
     } else if (mode === 'lowfly') {
-      this.camera.position.set(center.x - maxDim * 0.4, center.y + size.y * 0.4 + 20, center.z + maxDim * 0.4);
-      this.camera.lookAt(center.x, center.y + 20, center.z);
-    } else if (mode === 'highfly') {
-      this.camera.position.set(center.x, center.y + maxDim * 2.0, center.z + maxDim * 1.2);
+      this.camera.position.set(center.x - 40, center.y + 15, center.z + 40);
+      this.camera.lookAt(center.x, center.y + 10, center.z);
+    } else if (mode === 'reset' || mode === 'resetview') {
+      this.camera.position.set(center.x + 120, center.y + 100, center.z + 120);
       this.camera.lookAt(center);
-    } else if (mode === 'inspection') {
-      this.camera.position.set(center.x + 60, center.y + 45, center.z + 60);
+    } else {
+      this.camera.position.set(center.x + maxDim * 0.8, center.y + maxDim * 0.6, center.z + maxDim * 0.8);
       this.camera.lookAt(center);
     }
 
