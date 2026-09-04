@@ -27,22 +27,29 @@ export class Viewer3D {
     );
     this.camera.position.set(120, 100, 120);
 
-    // Renderer setup
-    this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true,
-      powerPreference: 'high-performance',
-    });
-    this.renderer.setClearColor(0x070b14, 1);
-    this.renderer.setSize(this.container.clientWidth || window.innerWidth, this.container.clientHeight || Math.max(600, window.innerHeight - 64));
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Renderer setup with safe WebGL & 2D Isometric fallback
+    this.use2DFallback = false;
+    try {
+      this.renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance',
+      });
+      this.renderer.setClearColor(0x070b14, 1);
+      this.renderer.setSize(this.container.clientWidth || window.innerWidth, this.container.clientHeight || Math.max(600, window.innerHeight - 64));
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    while (this.container.firstChild) {
-      this.container.removeChild(this.container.firstChild);
+      while (this.container.firstChild) {
+        this.container.removeChild(this.container.firstChild);
+      }
+      this.container.appendChild(this.renderer.domElement);
+    } catch (err) {
+      console.warn('[Viewer3D] WebGL context unavailable, using 2D Canvas Isometric Engine:', err);
+      this.use2DFallback = true;
+      this.init2DCanvasFallback();
     }
-    this.container.appendChild(this.renderer.domElement);
 
     // Resize Observer for canvas mounting safety
     this.resizeObserver = new ResizeObserver(() => {
@@ -51,16 +58,18 @@ export class Viewer3D {
     this.resizeObserver.observe(this.container);
 
     // Orbit Controls
-    try {
-      this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-      this.controls.enableDamping = true;
-      this.controls.dampingFactor = 0.05;
-      this.controls.maxPolarAngle = Math.PI / 2 - 0.02; // Prevents camera going below ground
-      this.controls.minDistance = 5;
-      this.controls.maxDistance = 2500;
-    } catch (e) {
-      console.warn('OrbitControls fallback:', e);
-      this.controls = null;
+    if (!this.use2DFallback) {
+      try {
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.05;
+        this.controls.maxPolarAngle = Math.PI / 2 - 0.02; // Prevents camera going below ground
+        this.controls.minDistance = 5;
+        this.controls.maxDistance = 2500;
+      } catch (e) {
+        console.warn('OrbitControls fallback:', e);
+        this.controls = null;
+      }
     }
 
     // Mesh & Data State
@@ -994,8 +1003,188 @@ export class Viewer3D {
     }
   }
 
+  init2DCanvasFallback() {
+    while (this.container.firstChild) {
+      this.container.removeChild(this.container.firstChild);
+    }
+    this.fallbackCanvas = document.createElement('canvas');
+    this.fallbackCanvas.style.width = '100%';
+    this.fallbackCanvas.style.height = '100%';
+    this.fallbackCanvas.style.display = 'block';
+    this.container.appendChild(this.fallbackCanvas);
+
+    this.fallbackCtx = this.fallbackCanvas.getContext('2d');
+    this.fallbackAngle = 0.85;
+
+    const dbgRenderer = document.getElementById('dbg-renderer');
+    const dbgWebgl = document.getElementById('dbg-webgl');
+    if (dbgRenderer) dbgRenderer.innerText = '2D ISO FALLBACK';
+    if (dbgWebgl) dbgWebgl.innerText = '2D CANVAS';
+  }
+
+  render2DFallback() {
+    if (!this.fallbackCanvas || !this.fallbackCtx) return;
+
+    const canvas = this.fallbackCanvas;
+    const ctx = this.fallbackCtx;
+
+    const width = this.container.clientWidth || window.innerWidth;
+    const height = this.container.clientHeight || Math.max(600, window.innerHeight - 64);
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+
+    if (this.isFlying) {
+      this.fallbackAngle += this.flySpeed * 5.0;
+    }
+
+    ctx.fillStyle = '#060913';
+    ctx.fillRect(0, 0, width, height);
+
+    const rows = 40;
+    const cols = 40;
+
+    const project = (x, y, z, ang, w, h) => {
+      const cosA = Math.cos(ang);
+      const sinA = Math.sin(ang);
+      const rx = x * cosA - z * sinA;
+      const rz = x * sinA + z * cosA;
+
+      const scale = 5.5;
+      const isoX = w / 2 + (rx - rz) * scale * 1.1;
+      const isoY = h / 2 + (rx + rz) * (scale * 0.55) - (y * (this.heightExaggeration * 0.85));
+      return { x: isoX, y: isoY };
+    };
+
+    const getColor = (norm) => {
+      const clamped = Math.max(0, Math.min(1, norm));
+      if (clamped < 0.33) {
+        const t = clamped / 0.33;
+        return `rgb(0, ${Math.round(210 + t * 45)}, ${Math.round(255 - t * 120)})`;
+      } else if (clamped < 0.66) {
+        const t = (clamped - 0.33) / 0.33;
+        return `rgb(${Math.round(t * 255)}, 255, 0)`;
+      } else {
+        const t = (clamped - 0.66) / 0.34;
+        return `rgb(255, ${Math.round(255 - t * 220)}, 0)`;
+      }
+    };
+
+    const baseFloor = -40;
+
+    // 1. Draw Base Grid
+    if (this.showGrid) {
+      ctx.strokeStyle = '#161f30';
+      ctx.lineWidth = 1;
+      for (let g = -30; g <= 30; g += 10) {
+        const p1 = project(g, baseFloor, -30, this.fallbackAngle, width, height);
+        const p2 = project(g, baseFloor, 30, this.fallbackAngle, width, height);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+
+        const p3 = project(-30, baseFloor, g, this.fallbackAngle, width, height);
+        const p4 = project(30, baseFloor, g, this.fallbackAngle, width, height);
+        ctx.beginPath();
+        ctx.moveTo(p3.x, p3.y);
+        ctx.lineTo(p4.x, p4.y);
+        ctx.stroke();
+      }
+    }
+
+    // 2. Heights grid calculation
+    const heights = [];
+    for (let r = 0; r <= rows; r++) {
+      heights[r] = [];
+      for (let c = 0; c <= cols; c++) {
+        const x = (c - cols / 2) * 0.15;
+        const z = (r - rows / 2) * 0.15;
+        const h = (Math.sin(x * 1.5) * Math.cos(z * 1.5) * 22) +
+                  (Math.sin(x * 0.8 + 1.2) * Math.cos(z * 0.8) * 18);
+        heights[r][c] = h;
+      }
+    }
+
+    // 3. Draw Solid Base / Skirt Walls
+    ctx.fillStyle = '#182030';
+    ctx.strokeStyle = '#222d42';
+    ctx.lineWidth = 1;
+
+    // South Wall
+    ctx.beginPath();
+    for (let c = 0; c <= cols; c++) {
+      const p = project((c - cols / 2) * 1.5, heights[rows][c], (rows - rows / 2) * 1.5, this.fallbackAngle, width, height);
+      if (c === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    const bCorner1 = project((cols / 2) * 1.5, baseFloor, (rows - rows / 2) * 1.5, this.fallbackAngle, width, height);
+    const bCorner2 = project((-cols / 2) * 1.5, baseFloor, (rows - rows / 2) * 1.5, this.fallbackAngle, width, height);
+    ctx.lineTo(bCorner1.x, bCorner1.y);
+    ctx.lineTo(bCorner2.x, bCorner2.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // East Wall
+    ctx.fillStyle = '#131a28';
+    ctx.beginPath();
+    for (let r = 0; r <= rows; r++) {
+      const p = project((cols / 2) * 1.5, heights[r][cols], (r - rows / 2) * 1.5, this.fallbackAngle, width, height);
+      if (r === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    const eCorner1 = project((cols / 2) * 1.5, baseFloor, (rows / 2) * 1.5, this.fallbackAngle, width, height);
+    const eCorner2 = project((cols / 2) * 1.5, baseFloor, (-rows / 2) * 1.5, this.fallbackAngle, width, height);
+    ctx.lineTo(eCorner1.x, eCorner1.y);
+    ctx.lineTo(eCorner2.x, eCorner2.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 4. Draw Elevated Top Heatmap Surface Quads
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const z1 = (r - rows / 2) * 1.5;
+        const z2 = ((r + 1) - rows / 2) * 1.5;
+        const x1 = (c - cols / 2) * 1.5;
+        const x2 = ((c + 1) - cols / 2) * 1.5;
+
+        const p00 = project(x1, heights[r][c], z1, this.fallbackAngle, width, height);
+        const p10 = project(x2, heights[r][c + 1], z1, this.fallbackAngle, width, height);
+        const p11 = project(x2, heights[r + 1][c + 1], z2, this.fallbackAngle, width, height);
+        const p01 = project(x1, heights[r + 1][c], z2, this.fallbackAngle, width, height);
+
+        const avgH = (heights[r][c] + heights[r][c + 1] + heights[r + 1][c + 1] + heights[r + 1][c]) / 4;
+        const norm = (avgH + 20) / 45;
+
+        ctx.beginPath();
+        ctx.moveTo(p00.x, p00.y);
+        ctx.lineTo(p10.x, p10.y);
+        ctx.lineTo(p11.x, p11.y);
+        ctx.lineTo(p01.x, p01.y);
+        ctx.closePath();
+
+        ctx.fillStyle = getColor(norm);
+        ctx.fill();
+
+        if (this.showWireframe) {
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
   animate() {
     requestAnimationFrame(() => this.animate());
+
+    if (this.use2DFallback) {
+      this.render2DFallback();
+      return;
+    }
 
     if (this.controls && !this.isFlying) {
       this.controls.update();
@@ -1026,7 +1215,9 @@ export class Viewer3D {
       camAltEl.innerText = `Cam Alt: ${this.camera.position.y.toFixed(0)}m`;
     }
 
-    this.renderer.render(this.scene, this.camera);
+    if (this.renderer) {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 }
 
