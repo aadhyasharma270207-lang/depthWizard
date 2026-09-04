@@ -1,0 +1,5 @@
+image_path,dsm_path,scene_type,crs,resolution_m
+images\urban_01.png,dsm\urban_01_dsm.npy,Urban,EPSG:4326,1.0
+images\sparse_01.png,dsm\sparse_01_dsm.npy,Sparse,EPSG:4326,1.0
+images\hilly_01.png,dsm\hilly_01_dsm.npy,Hilly,EPSG:4326,1.0
+images\forested_01.png,dsm\forested_01_dsm.npy,Forested,EPSG:4326,1.0
