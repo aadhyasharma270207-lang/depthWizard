@@ -34,10 +34,14 @@ export class Viewer3D {
       powerPreference: 'high-performance',
     });
     this.renderer.setClearColor(0x060913, 1);
-    this.renderer.setSize(this.container.clientWidth || 800, this.container.clientHeight || 600);
+    this.renderer.setSize(this.container.clientWidth || window.innerWidth, this.container.clientHeight || Math.max(600, window.innerHeight - 64));
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    while (this.container.firstChild) {
+      this.container.removeChild(this.container.firstChild);
+    }
     this.container.appendChild(this.renderer.domElement);
 
     // Resize Observer for canvas mounting safety
@@ -135,7 +139,7 @@ export class Viewer3D {
   }
 
   setupLighting() {
-    const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.85);
     this.scene.add(ambient);
 
     // Directional Sun Light
@@ -153,7 +157,7 @@ export class Viewer3D {
 
     // Ground Grid Helper & Subtle 3D Axes Reference Helper
     this.gridHelper = new THREE.GridHelper(800, 40, 0x00f2fe, 0x1c2438);
-    this.gridHelper.position.y = -1.0;
+    this.gridHelper.position.y = -30.0;
     this.scene.add(this.gridHelper);
 
     this.axesHelper = new THREE.AxesHelper(60);
@@ -164,7 +168,7 @@ export class Viewer3D {
   handleResize() {
     if (!this.container) return;
     const width = this.container.clientWidth || window.innerWidth;
-    const height = this.container.clientHeight || window.innerHeight;
+    const height = this.container.clientHeight || Math.max(600, window.innerHeight - 64);
     if (width > 0 && height > 0) {
       this.camera.aspect = width / height;
       this.camera.updateProjectionMatrix();
