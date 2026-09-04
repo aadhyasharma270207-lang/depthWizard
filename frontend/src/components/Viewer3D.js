@@ -369,6 +369,8 @@ export class Viewer3D {
     this.wireframeMesh.visible = this.showWireframe;
     this.scene.add(this.wireframeMesh);
 
+    this.buildVolumetricBlockSkirts(H, W, aspectW, aspectH, -15.0);
+
     if (rgbTextureUrl) {
       const loader = new THREE.TextureLoader();
       loader.load(rgbTextureUrl, (tex) => {
@@ -398,6 +400,91 @@ export class Viewer3D {
         label: datasetLabel,
       });
     }
+  }
+
+  /**
+   * Constructs vertical side skirts and a solid bottom cap to create a 3D volumetric terrain block.
+   */
+  buildVolumetricBlockSkirts(H, W, aspectW, aspectH, baseY = -15.0) {
+    if (this.skirtGroup) {
+      this.skirtGroup.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      });
+      this.scene.remove(this.skirtGroup);
+    }
+
+    this.skirtGroup = new THREE.Group();
+    const skirtMat = new THREE.MeshStandardMaterial({
+      color: 0x1c2438,
+      roughness: 0.85,
+      metalness: 0.2,
+      side: THREE.DoubleSide,
+    });
+
+    const perimeterIndices = [];
+    for (let j = 0; j < W; j++) perimeterIndices.push(0 * W + j);
+    for (let i = 1; i < H; i++) perimeterIndices.push(i * W + (W - 1));
+    for (let j = W - 2; j >= 0; j--) perimeterIndices.push((H - 1) * W + j);
+    for (let i = H - 2; i >= 1; i--) perimeterIndices.push(i * W + 0);
+
+    const numPerimeter = perimeterIndices.length;
+    const skirtPositions = new Float32Array(numPerimeter * 4 * 3);
+    const skirtIndices = [];
+
+    const topPos = this.terrainMesh.geometry.attributes.position;
+
+    for (let k = 0; k < numPerimeter; k++) {
+      const idxCurr = perimeterIndices[k];
+      const idxNext = perimeterIndices[(k + 1) % numPerimeter];
+
+      const x1 = topPos.getX(idxCurr), y1 = topPos.getY(idxCurr), z1 = topPos.getZ(idxCurr);
+      const x2 = topPos.getX(idxNext), y2 = topPos.getY(idxNext), z2 = topPos.getZ(idxNext);
+
+      const baseIdx = k * 4;
+      skirtPositions[baseIdx * 3] = x1;
+      skirtPositions[baseIdx * 3 + 1] = y1;
+      skirtPositions[baseIdx * 3 + 2] = z1;
+
+      skirtPositions[(baseIdx + 1) * 3] = x1;
+      skirtPositions[(baseIdx + 1) * 3 + 1] = baseY;
+      skirtPositions[(baseIdx + 1) * 3 + 2] = z1;
+
+      skirtPositions[(baseIdx + 2) * 3] = x2;
+      skirtPositions[(baseIdx + 2) * 3 + 1] = y2;
+      skirtPositions[(baseIdx + 2) * 3 + 2] = z2;
+
+      skirtPositions[(baseIdx + 3) * 3] = x2;
+      skirtPositions[(baseIdx + 3) * 3 + 1] = baseY;
+      skirtPositions[(baseIdx + 3) * 3 + 2] = z2;
+
+      const vTop1 = baseIdx;
+      const vBot1 = baseIdx + 1;
+      const vTop2 = baseIdx + 2;
+      const vBot2 = baseIdx + 3;
+
+      skirtIndices.push(vTop1, vBot1, vTop2);
+      skirtIndices.push(vTop2, vBot1, vBot2);
+    }
+
+    const skirtGeo = new THREE.BufferGeometry();
+    skirtGeo.setAttribute('position', new THREE.BufferAttribute(skirtPositions, 3));
+    skirtGeo.setIndex(skirtIndices);
+    skirtGeo.computeVertexNormals();
+
+    const skirtMesh = new THREE.Mesh(skirtGeo, skirtMat);
+    skirtMesh.castShadow = true;
+    skirtMesh.receiveShadow = true;
+    this.skirtGroup.add(skirtMesh);
+
+    const capGeo = new THREE.PlaneGeometry(aspectW, aspectH);
+    capGeo.rotateX(Math.PI / 2);
+    capGeo.translate(0, baseY, 0);
+    const capMesh = new THREE.Mesh(capGeo, skirtMat);
+    capMesh.receiveShadow = true;
+    this.skirtGroup.add(capMesh);
+
+    this.scene.add(this.skirtGroup);
   }
 
   updateDebugPanel(verts, tris, rawW, rawH) {
