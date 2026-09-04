@@ -114,3 +114,12 @@ class TerrainMeshGenerator:
         mesh.export(output_path, file_type="obj")
         logger.info(f"Exported 3D OBJ mesh to {output_path}")
         return output_path
+
+    @staticmethod
+    def export_ply(mesh: trimesh.Trimesh, output_path: str) -> str:
+        """Exports 3D mesh to PLY file."""
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        mesh.export(output_path, file_type="ply")
+        logger.info(f"Exported 3D PLY mesh to {output_path}")
+        return output_path
+

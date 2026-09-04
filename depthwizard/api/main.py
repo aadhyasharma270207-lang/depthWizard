@@ -440,12 +440,40 @@ def get_job_dsm(job_id: str):
 
 
 @app.get("/api/jobs/{job_id}/mesh", tags=["Jobs"])
-def get_job_mesh(job_id: str):
-    """Downloads 3D GLB binary mesh file for a job."""
-    glb_path = os.path.join(JOBS_DIR, job_id, "mesh.glb")
+def get_job_mesh(job_id: str, format: str = "glb"):
+    """Downloads 3D mesh file (.glb, .obj, or .ply) for a job."""
+    job_dir = os.path.join(JOBS_DIR, job_id)
+    if not os.path.exists(job_dir):
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+
+    fmt = format.lower()
+    if fmt == "obj":
+        obj_path = os.path.join(job_dir, "mesh.obj")
+        if not os.path.exists(obj_path):
+            npy_path = os.path.join(job_dir, "dsm.npy")
+            if os.path.exists(npy_path):
+                grid = np.load(npy_path)
+                mesh_obj = TerrainMeshGenerator.generate_mesh(grid)
+                TerrainMeshGenerator.export_obj(mesh_obj, obj_path)
+        if os.path.exists(obj_path):
+            return FileResponse(obj_path, filename=f"{job_id}_terrain.obj", media_type="text/plain")
+
+    if fmt == "ply":
+        ply_path = os.path.join(job_dir, "mesh.ply")
+        if not os.path.exists(ply_path):
+            npy_path = os.path.join(job_dir, "dsm.npy")
+            if os.path.exists(npy_path):
+                grid = np.load(npy_path)
+                mesh_obj = TerrainMeshGenerator.generate_mesh(grid)
+                TerrainMeshGenerator.export_ply(mesh_obj, ply_path)
+        if os.path.exists(ply_path):
+            return FileResponse(ply_path, filename=f"{job_id}_terrain.ply", media_type="application/octet-stream")
+
+    glb_path = os.path.join(job_dir, "mesh.glb")
     if not os.path.exists(glb_path):
-        raise HTTPException(status_code=404, detail=f"3D mesh for job {job_id} not found.")
+        raise HTTPException(status_code=404, detail=f"3D GLB mesh for job {job_id} not found.")
     return FileResponse(glb_path, filename=f"{job_id}_terrain.glb", media_type="model/gltf-binary")
+
 
 
 @app.get("/api/jobs/{job_id}/preview", tags=["Jobs"])
