@@ -15,8 +15,8 @@ export class Viewer3D {
 
     // 3D Scene setup
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x060913);
-    this.scene.fog = new THREE.FogExp2(0x060913, 0.0012);
+    this.scene.background = new THREE.Color(0x070b14);
+    this.scene.fog = new THREE.FogExp2(0x070b14, 0.0012);
 
     // Camera setup
     this.camera = new THREE.PerspectiveCamera(
@@ -33,7 +33,7 @@ export class Viewer3D {
       alpha: true,
       powerPreference: 'high-performance',
     });
-    this.renderer.setClearColor(0x060913, 1);
+    this.renderer.setClearColor(0x070b14, 1);
     this.renderer.setSize(this.container.clientWidth || window.innerWidth, this.container.clientHeight || Math.max(600, window.innerHeight - 64));
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
