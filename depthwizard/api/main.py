@@ -295,6 +295,7 @@ async def process_image_endpoint(
                 "rel_depth": f"/outputs/jobs/{job_id}/rel_depth.png",
                 "slope": f"/outputs/jobs/{job_id}/slope.png",
                 "grid": f"/api/jobs/{job_id}/grid",
+                "input": f"/api/jobs/{job_id}/input",
             },
         }
 
@@ -483,6 +484,20 @@ def get_job_preview(job_id: str):
     if not os.path.exists(preview_path):
         raise HTTPException(status_code=404, detail=f"Preview for job {job_id} not found.")
     return FileResponse(preview_path, media_type="image/png")
+
+
+@app.get("/api/jobs/{job_id}/input", tags=["Jobs"])
+def get_job_input_photo(job_id: str):
+    """Returns the input satellite/aerial photo file for a job."""
+    job_dir = os.path.join(JOBS_DIR, job_id)
+    if not os.path.exists(job_dir):
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+    for file_name in os.listdir(job_dir):
+        if file_name.startswith("input."):
+            file_path = os.path.join(job_dir, file_name)
+            media_type = "image/png" if file_name.endswith(".png") else "image/jpeg"
+            return FileResponse(file_path, media_type=media_type)
+    raise HTTPException(status_code=404, detail=f"Input photo for job {job_id} not found.")
 
 
 @app.get("/api/jobs/{job_id}/metadata", tags=["Jobs"])

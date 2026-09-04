@@ -965,14 +965,14 @@ export class Viewer3D {
       if (stepMesh) stepMesh.innerHTML = '🟡 Building 3D mesh geometry...';
       await new Promise(r => setTimeout(r, 60));
 
-      const previewUrl = `/api/jobs/${jobId}/preview`;
+      const inputPhotoUrl = `/api/jobs/${jobId}/input`;
       
       if (stepNormals) stepNormals.innerHTML = '🟡 Computing vertex normals...';
       if (stepColors) stepColors.innerHTML = '🟡 Applying elevation colors...';
 
       this.buildTerrainFromElevationGrid(
         data.elevations,
-        previewUrl,
+        inputPhotoUrl,
         null,
         data.unit,
         data.is_georeferenced,
@@ -1219,5 +1219,33 @@ export class Viewer3D {
       this.renderer.render(this.scene, this.camera);
     }
   }
+}
+
+/**
+ * Client-side luminance height extractor for 2D elevation images.
+ */
+export async function extractHeightsFromDsmImage(imageUrl, gridWidth = 128, gridHeight = 128) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = gridWidth;
+      offCanvas.height = gridHeight;
+      const ctx = offCanvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, gridWidth, gridHeight);
+      const imgData = ctx.getImageData(0, 0, gridWidth, gridHeight).data;
+      const heights = new Float32Array(gridWidth * gridHeight);
+      for (let i = 0; i < heights.length; i++) {
+        const r = imgData[i * 4];
+        const g = imgData[i * 4 + 1];
+        const b = imgData[i * 4 + 2];
+        heights[i] = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
+      }
+      resolve({ heights, width: gridWidth, height: gridHeight });
+    };
+    img.onerror = () => resolve(null);
+    img.src = imageUrl;
+  });
 }
 
