@@ -123,10 +123,25 @@ export class Viewer3D {
     rimLight.position.set(-300, 200, -300);
     this.scene.add(rimLight);
 
-    // Ground Grid Helper
+    // Ground Grid Helper & Subtle 3D Axes Reference Helper
     this.gridHelper = new THREE.GridHelper(800, 40, 0x00f2fe, 0x1c2438);
     this.gridHelper.position.y = -1.0;
     this.scene.add(this.gridHelper);
+
+    this.axesHelper = new THREE.AxesHelper(60);
+    this.axesHelper.visible = false;
+    this.scene.add(this.axesHelper);
+  }
+
+  handleResize() {
+    if (!this.container) return;
+    const width = this.container.clientWidth || window.innerWidth;
+    const height = this.container.clientHeight || window.innerHeight;
+    if (width > 0 && height > 0) {
+      this.camera.aspect = width / height;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(width, height);
+    }
   }
 
   setupHoverMarker() {
@@ -148,10 +163,7 @@ export class Viewer3D {
 
   setupEvents() {
     window.addEventListener('resize', () => {
-      if (!this.container) return;
-      this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
-      this.camera.updateProjectionMatrix();
-      this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+      this.handleResize();
     });
 
     this.container.addEventListener('mousemove', (e) => {
@@ -178,15 +190,17 @@ export class Viewer3D {
    */
   fitCameraToTerrain() {
     if (!this.terrainMesh) return;
-    const box = new THREE.Box3().setFromObject(this.terrainMesh);
+    this.terrainMesh.geometry.computeBoundingBox();
+    const box = this.terrainMesh.geometry.boundingBox;
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.z, size.y);
+    const maxDim = Math.max(size.x, size.z, size.y, 40);
 
+    const dist = maxDim * 1.35;
     this.camera.position.set(
-      center.x,
-      center.y + maxDim * 0.85 + 60,
-      center.z + maxDim * 1.0 + 80
+      center.x + dist * 0.6,
+      center.y + dist * 0.65,
+      center.z + dist * 0.85
     );
     this.camera.lookAt(center);
     if (this.controls) {
@@ -225,25 +239,32 @@ export class Viewer3D {
     const W = Math.floor((rawW - 1) / stride) + 1;
 
     let minE = Infinity, maxE = -Infinity, sumE = 0, count = 0;
+    let validCount = 0, invalidCount = 0;
     this.heightsArray = new Float32Array(H * W);
 
     for (let i = 0; i < H; i++) {
       for (let j = 0; j < W; j++) {
         const rIdx = Math.min(rawH - 1, i * stride);
         const cIdx = Math.min(rawW - 1, j * stride);
-        const val = grid2D[rIdx][cIdx];
-        this.heightsArray[i * W + j] = val;
-        if (!isNaN(val) && isFinite(val)) {
-          if (val < minE) minE = val;
-          if (val > maxE) maxE = val;
-          sumE += val;
-          count++;
+        let val = grid2D[rIdx][cIdx];
+        if (typeof val !== 'number' || isNaN(val) || !isFinite(val)) {
+          val = 0.0;
+          invalidCount++;
+        } else {
+          validCount++;
         }
+        this.heightsArray[i * W + j] = val;
+        if (val < minE) minE = val;
+        if (val > maxE) maxE = val;
+        sumE += val;
+        count++;
       }
     }
     this.minElev = isFinite(minE) ? minE : 0;
     this.maxElev = isFinite(maxE) ? maxE : (isCalibrated ? 100 : 1.0);
     this.meanElev = count > 0 ? sumE / count : (isCalibrated ? 50 : 0.5);
+
+    console.log(`[Viewer3D] Grid Built: ${W}x${H} | Valid Vertices: ${validCount} | Invalid Vertices: ${invalidCount}`);
 
     const aspectW = 300.0;
     const aspectH = (rawH / rawW) * 300.0;

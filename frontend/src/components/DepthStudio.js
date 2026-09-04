@@ -113,6 +113,9 @@ export function renderDepthStudio(container, onJobComplete, onViewMeshClicked) {
   fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
+      currentJobResult = null;
+      btnView3D.style.display = 'none';
+      
       const reader = new FileReader();
       reader.onload = (ev) => {
         const inputImg = document.getElementById('img-input-preview');
@@ -130,6 +133,9 @@ export function renderDepthStudio(container, onJobComplete, onViewMeshClicked) {
       alert('Please select an image or GeoTIFF file first.');
       return;
     }
+
+    currentJobResult = null;
+    btnView3D.style.display = 'none';
 
     const scaleVal = document.getElementById('scale-input').value;
     const offsetVal = document.getElementById('offset-input').value;
@@ -151,22 +157,30 @@ export function renderDepthStudio(container, onJobComplete, onViewMeshClicked) {
       const res = await processImage(file, scale, offset);
       currentJobResult = res;
 
-      document.getElementById('img-depth-preview').src = res.urls.preview;
-      document.getElementById('img-depth-preview').style.display = 'block';
+      const ts = Date.now();
+      const relDepthUrl = res.urls.rel_depth ? `${res.urls.rel_depth}?t=${ts}` : `${res.urls.preview}?t=${ts}`;
+      const dsmUrl = `${res.urls.preview}?t=${ts}`;
+      const slopeUrl = `${res.urls.slope}?t=${ts}`;
+
+      const imgDepth = document.getElementById('img-depth-preview');
+      imgDepth.src = relDepthUrl;
+      imgDepth.style.display = 'block';
       document.getElementById('placeholder-depth').style.display = 'none';
 
-      document.getElementById('img-dsm-preview').src = res.urls.preview;
-      document.getElementById('img-dsm-preview').style.display = 'block';
+      const imgDsm = document.getElementById('img-dsm-preview');
+      imgDsm.src = dsmUrl;
+      imgDsm.style.display = 'block';
       document.getElementById('placeholder-dsm').style.display = 'none';
 
-      document.getElementById('img-slope-preview').src = res.urls.slope;
-      document.getElementById('img-slope-preview').style.display = 'block';
+      const imgSlope = document.getElementById('img-slope-preview');
+      imgSlope.src = slopeUrl;
+      imgSlope.style.display = 'block';
       document.getElementById('placeholder-slope').style.display = 'none';
 
       statusSteps.innerHTML = `✓ Job ${res.job_id} processing complete!<br>✓ Status: ${res.status_message}<br><span style="color: var(--accent-green);">✓ 3D Terrain Surface Ready!</span>`;
       
       // Update Provenance Card
-      provFilename.innerText = file.filename || file.name;
+      provFilename.innerText = file.name || 'Input Photo';
       provGeo.innerText = res.is_georeferenced ? 'Yes (GeoTIFF CRS preserved)' : 'No (Standard RGB photo)';
       provDevice.innerText = res.device || 'CPU';
       provUnit.innerText = res.is_georeferenced || res.unit === 'metres' ? 'Metric Absolute DSM (m)' : 'Relative DSM (Unitless rDSM)';
@@ -177,11 +191,16 @@ export function renderDepthStudio(container, onJobComplete, onViewMeshClicked) {
       if (onJobComplete) onJobComplete(res.urls.mesh, res);
     } catch (err) {
       statusSteps.innerHTML = `<span style="color: #ff5252;">❌ Error: ${err.message}</span>`;
+      btnView3D.style.display = 'none';
     }
   });
 
   btnView3D.addEventListener('click', () => {
-    if (onViewMeshClicked && currentJobResult) {
+    if (!currentJobResult || !currentJobResult.job_id) {
+      alert('Terrain data is not ready. Process the image first.');
+      return;
+    }
+    if (onViewMeshClicked) {
       onViewMeshClicked(currentJobResult.urls.mesh, currentJobResult);
     }
   });

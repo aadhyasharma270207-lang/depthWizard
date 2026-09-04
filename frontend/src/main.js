@@ -268,6 +268,9 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
   `;
 
+  // Application State Store
+  let activeJobId = null;
+
   // Initialize 3D Hero Viewer safely with fallback
   let viewer = null;
   try {
@@ -285,12 +288,24 @@ document.addEventListener('DOMContentLoaded', () => {
     (tabName) => {
       document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.remove('active'));
       document.getElementById(`tab-${tabName}`).classList.add('active');
+
+      if (tabName === 'viewer' && viewer) {
+        setTimeout(() => viewer.handleResize(), 50);
+        if (activeJobId && !viewer.hasUserData) {
+          viewer.fetchGridAndBuildTerrain(activeJobId);
+        }
+      }
     },
     async () => {
       // Quick Demo Trigger
       try {
         const demoRes = await runDemoDataset('urban_buildings');
-        if (viewer) viewer.loadGLBMesh(demoRes.mesh_glb_url);
+        if (demoRes && demoRes.job_id) {
+          activeJobId = demoRes.job_id;
+          if (viewer) viewer.fetchGridAndBuildTerrain(demoRes.job_id);
+        } else if (viewer) {
+          viewer.loadGLBMesh(demoRes.mesh_glb_url);
+        }
         alert('🚀 Quick Demo dataset loaded into 3D Hero Flythrough Viewer!');
       } catch (err) {
         console.error('Demo load error:', err);
@@ -306,20 +321,26 @@ document.addEventListener('DOMContentLoaded', () => {
   renderDepthStudio(
     document.getElementById('tab-studio'),
     (meshUrl, resData) => {
-      if (viewer && resData && resData.job_id) {
-        viewer.fetchGridAndBuildTerrain(resData.job_id);
+      if (resData && resData.job_id) {
+        activeJobId = resData.job_id;
+        if (viewer) viewer.fetchGridAndBuildTerrain(resData.job_id);
       }
     },
     (meshUrl, resData) => {
+      if (resData && resData.job_id) {
+        activeJobId = resData.job_id;
+      }
       // Switch tab to viewer and load grid mesh
       document.querySelectorAll('.tab-btn[data-tab]').forEach((b) => b.classList.remove('active'));
-      document.querySelector('.tab-btn[data-tab="viewer"]').classList.add('active');
+      const vBtn = document.querySelector('.tab-btn[data-tab="viewer"]');
+      if (vBtn) vBtn.classList.add('active');
 
       document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.remove('active'));
       document.getElementById('tab-viewer').classList.add('active');
 
-      if (viewer && resData && resData.job_id) {
-        viewer.fetchGridAndBuildTerrain(resData.job_id);
+      if (viewer && activeJobId) {
+        setTimeout(() => viewer.handleResize(), 50);
+        viewer.fetchGridAndBuildTerrain(activeJobId);
       }
     }
   );

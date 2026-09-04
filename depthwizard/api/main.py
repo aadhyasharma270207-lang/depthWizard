@@ -159,11 +159,23 @@ async def process_image_endpoint(
         # 1. Read image & detect georeferencing
         rgb_img, meta = GeospatialIO.read_image(input_path)
         is_georeferenced = meta.get("is_georeferenced", False)
+        
+        img_h, img_w = rgb_img.shape[:2]
+        img_c = rgb_img.shape[2] if len(rgb_img.shape) > 2 else 1
+        logger.info(f"INPUT IMAGE [{job_id}]: width={img_w}, height={img_h}, channels={img_c}, filename={file.filename}")
 
         # 2. Run Depth Anything V2 (REUSING loaded singleton predictor)
         logger.info(f"Running Depth Anything V2 inference for job {job_id}...")
         predictor = get_predictor_instance(request.app)
         rel_depth = predictor.predict(rgb_img)
+
+        # Log depth array validation
+        logger.info(
+            f"DEPTH OUTPUT [{job_id}]: shape={rel_depth.shape}, dtype={rel_depth.dtype}, "
+            f"min={float(np.min(rel_depth)):.4f}, max={float(np.max(rel_depth)):.4f}, "
+            f"mean={float(np.mean(rel_depth)):.4f}, NaN={bool(np.isnan(rel_depth).any())}, "
+            f"Inf={bool(np.isinf(rel_depth).any())}"
+        )
 
         # Save relative depth
         rel_depth_path = os.path.join(job_dir, "relative_depth.npy")
@@ -205,7 +217,10 @@ async def process_image_endpoint(
             dsm_geotiff_path = os.path.join(job_dir, "dsm.tif")
             GeospatialIO.write_geotiff(dsm_geotiff_path, abs_dsm if abs_dsm is not None else rdsm, meta)
 
-        # Save previews
+        # Save distinct colormap previews
+        rel_preview_path = os.path.join(job_dir, "rel_depth.png")
+        save_colormap_preview(rel_depth, rel_preview_path, cmap_name="viridis")
+
         preview_path = os.path.join(job_dir, "preview.png")
         save_colormap_preview(abs_dsm if abs_dsm is not None else rdsm, preview_path, cmap_name="terrain")
 
@@ -277,7 +292,9 @@ async def process_image_endpoint(
                 "mesh": f"/api/jobs/{job_id}/mesh",
                 "metadata": f"/api/jobs/{job_id}/metadata",
                 "preview": f"/api/jobs/{job_id}/preview",
+                "rel_depth": f"/outputs/jobs/{job_id}/rel_depth.png",
                 "slope": f"/outputs/jobs/{job_id}/slope.png",
+                "grid": f"/api/jobs/{job_id}/grid",
             },
         }
 
