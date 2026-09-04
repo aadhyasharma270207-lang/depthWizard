@@ -78,8 +78,25 @@ document.addEventListener('DOMContentLoaded', () => {
     </main>
   `;
 
-  // Initialize 3D Viewer
-  const viewer = new Viewer3D('canvas3d');
+  // Initialize 3D Viewer safely with graceful fallback
+  let viewer = null;
+  try {
+    viewer = new Viewer3D('canvas3d');
+  } catch (err) {
+    console.warn('3D Viewer initialization warning:', err);
+    const canvasEl = document.getElementById('canvas3d');
+    if (canvasEl) {
+      canvasEl.innerHTML = `
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--text-muted); text-align:center; padding:20px;">
+          <div style="font-size:2.5rem; margin-bottom:10px;">🗻</div>
+          <div style="font-size:1.1rem; font-weight:600; color:var(--text-main);">DepthWizard 3D Terrain Viewer</div>
+          <p style="max-width:420px; font-size:0.85rem; margin-top:8px; color:var(--text-muted);">
+            Upload and process a photo or GeoTIFF in the <strong>Depth & DSM Studio</strong> tab to generate your 3D elevation terrain mesh.
+          </p>
+        </div>
+      `;
+    }
+  }
 
   // Setup Navbar
   renderNavbar(
@@ -92,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Quick Demo Trigger
       try {
         const demoRes = await runDemoDataset('urban_buildings');
-        viewer.loadGLBMesh(demoRes.mesh_glb_url);
+        if (viewer) viewer.loadGLBMesh(demoRes.mesh_glb_url);
         alert('🚀 Quick Demo dataset loaded into 3D Flythrough Viewer!');
       } catch (err) {
         console.error('Demo load error:', err);
@@ -102,31 +119,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Render Sub-components
   renderDepthStudio(document.getElementById('tab-studio'), (glbUrl) => {
-    viewer.loadGLBMesh(glbUrl);
+    if (viewer) viewer.loadGLBMesh(glbUrl);
   });
   renderCalibrationPanel(document.getElementById('tab-calibration'));
   renderEvaluationDashboard(document.getElementById('tab-evaluation'));
 
   // 3D Controls Bindings
   document.getElementById('select-camera-mode').addEventListener('change', (e) => {
-    viewer.setFlyMode(e.target.value);
+    if (viewer) viewer.setFlyMode(e.target.value);
   });
 
   document.getElementById('slider-exagg').addEventListener('input', (e) => {
     const val = parseFloat(e.target.value);
     document.getElementById('val-exagg').innerText = `${val.toFixed(1)}x`;
-    viewer.setExaggeration(val);
+    if (viewer) viewer.setExaggeration(val);
   });
 
   document.getElementById('chk-wireframe').addEventListener('change', (e) => {
-    viewer.setWireframe(e.target.checked);
+    if (viewer) viewer.setWireframe(e.target.checked);
   });
 
   document.getElementById('btn-reset-cam').addEventListener('click', () => {
-    viewer.resetCamera();
+    if (viewer) viewer.resetCamera();
   });
 
   document.getElementById('btn-fullscreen').addEventListener('click', () => {
-    viewer.toggleFullscreen();
+    if (viewer) viewer.toggleFullscreen();
   });
 });

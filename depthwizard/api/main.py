@@ -87,9 +87,14 @@ app.add_middleware(
 # Mount outputs directory
 app.mount("/outputs", StaticFiles(directory=os.path.join(os.getcwd(), "outputs")), name="outputs")
 
-# Mount frontend production build if available
-FRONTEND_DIST = os.path.join(os.getcwd(), "frontend", "dist")
+# Mount frontend production build static assets if available
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+FRONTEND_DIST = os.path.join(BASE_DIR, "frontend", "dist")
+
 if os.path.exists(FRONTEND_DIST):
+    assets_dir = os.path.join(FRONTEND_DIST, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
     app.mount("/static", StaticFiles(directory=FRONTEND_DIST), name="static")
 
 # Include v1 Routers
@@ -442,3 +447,14 @@ def get_job_metadata_file(job_id: str):
     if not os.path.exists(meta_path):
         raise HTTPException(status_code=404, detail=f"Metadata for job {job_id} not found.")
     return FileResponse(meta_path, filename=f"{job_id}_metadata.json", media_type="application/json")
+
+
+@app.get("/{full_path:path}")
+def catch_all_spa(full_path: str):
+    """Fallback SPA router for frontend navigation routes."""
+    if full_path.startswith(("api/", "health", "docs", "openapi.json", "outputs/", "static/", "assets/")):
+        raise HTTPException(status_code=404, detail="API resource not found")
+    index_html = os.path.join(FRONTEND_DIST, "index.html")
+    if os.path.exists(index_html):
+        return FileResponse(index_html)
+    raise HTTPException(status_code=404, detail="Frontend dist not found")
