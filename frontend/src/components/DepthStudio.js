@@ -110,24 +110,34 @@ export function renderDepthStudio(container, onJobComplete, onViewMeshClicked) {
 
   let currentJobResult = null;
 
+  const setUploadedRgbUrl = (url) => {
+    window.__UPLOADED_RGB_URL__ = url;
+    if (window.__VIEWER3D_INSTANCE__) {
+      window.__VIEWER3D_INSTANCE__.syncMeshToNewInput(url, window.__ACTIVE_DSM_URL__ || null);
+    }
+  };
+
+  const setActiveDsmUrl = (url) => {
+    window.__ACTIVE_DSM_URL__ = url;
+    if (window.__VIEWER3D_INSTANCE__) {
+      window.__VIEWER3D_INSTANCE__.syncMeshToNewInput(window.__UPLOADED_RGB_URL__ || null, url);
+    }
+  };
+
   fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
       currentJobResult = null;
       btnView3D.style.display = 'none';
       
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const inputImg = document.getElementById('img-input-preview');
-        inputImg.src = ev.target.result;
-        inputImg.style.display = 'block';
-        document.getElementById('placeholder-input').style.display = 'none';
+      const objectUrl = URL.createObjectURL(file);
+      const inputImg = document.getElementById('img-input-preview');
+      inputImg.src = objectUrl;
+      inputImg.style.display = 'block';
+      document.getElementById('placeholder-input').style.display = 'none';
 
-        if (window.__VIEWER3D_INSTANCE__) {
-          window.__VIEWER3D_INSTANCE__.updateTerrainFromActiveUpload(ev.target.result, null);
-        }
-      };
-      reader.readAsDataURL(file);
+      // Immediately set the global/shared state
+      setUploadedRgbUrl(objectUrl);
     }
   });
 
@@ -165,6 +175,9 @@ export function renderDepthStudio(container, onJobComplete, onViewMeshClicked) {
       const relDepthUrl = res.urls.rel_depth ? `${res.urls.rel_depth}?t=${ts}` : `${res.urls.preview}?t=${ts}`;
       const dsmUrl = `${res.urls.preview}?t=${ts}`;
       const slopeUrl = `${res.urls.slope}?t=${ts}`;
+
+      // Set the resulting DSM map URL in shared state
+      setActiveDsmUrl(relDepthUrl);
 
       const imgDepth = document.getElementById('img-depth-preview');
       imgDepth.src = relDepthUrl;
